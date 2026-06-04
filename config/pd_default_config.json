@@ -1,0 +1,65 @@
+{
+    "app_name": "超高频局部放电在线监测系统",
+    "version": "1.0.0",
+    "database": {
+        "path": "data/pd_monitor.db",
+        "backup_on_startup": true,
+        "max_backup_files": 5
+    },
+    "communication": {
+        "tcp_port": 5000,
+        "udp_port": 6000,
+        "default_timeout": 5.0,
+        "max_retries": 3,
+        "retry_interval": 1.0,
+        "heartbeat_interval": 10.0,
+        "auto_reconnect": true,
+        "buffer_size": 65536
+    },
+    "acquisition": {
+        "sample_rate_hz": 100000000,
+        "waveform_points": 4096,
+        "waveform_fps": 20,
+        "prpd_fps": 10,
+        "fft_fps": 10,
+        "max_devices": 128,
+        "max_channels": 1024
+    },
+    "alarm": {
+        "enabled": true,
+        "sound_enabled": false,
+        "popup_enabled": true,
+        "max_active_alarms": 1000,
+        "levels": {
+            "critical": {"name": "严重报警", "threshold": 80.0},
+            "warning": {"name": "一般报警", "threshold": 50.0},
+            "info": {"name": "提示报警", "threshold": 30.0}
+        }
+    },
+    "storage": {
+        "max_pd_events": 10000000,
+        "retention_days": 365,
+        "archive_enabled": true,
+        "archive_path": "data/archive/"
+    },
+    "logging": {
+        "level": "INFO",
+        "log_dir": "logs/pd_system",
+        "max_file_size_mb": 10,
+        "backup_count": 5
+    },
+    "ui": {
+        "theme": "light",
+        "language": "zh-CN",
+        "window_min_width": 1280,
+        "window_min_height": 720,
+        "nav_collapsed": false
+    },
+    "report": {
+        "output_dir": "reports/",
+        "formats": ["pdf", "xlsx"],
+        "auto_generate_daily": false,
+        "auto_generate_weekly": false,
+        "auto_generate_monthly": false
+    }
+}
