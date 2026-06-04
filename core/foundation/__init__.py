@@ -12,4 +12,15 @@ from core.foundation.data_bus import DataBus, DeadbandFilter, SubscriptionManage
 from core.foundation.config_store import ConfigStore
 from core.foundation.plugin_registry import PluginRegistry, DevicePlugin
 
-__all__ = ['DataBus', 'DeadbandFilter', 'SubscriptionManager', 'ConfigStore', 'PluginRegistry', 'DevicePlugin']
+# PD DataBus（可选）
+try:
+    from core.foundation.pd_data_bus import PDDataBus, PDDataBusSignals
+except ImportError:
+    PDDataBus = None  # type: ignore
+    PDDataBusSignals = None  # type: ignore
+
+__all__ = [
+    'DataBus', 'DeadbandFilter', 'SubscriptionManager', 'ConfigStore',
+    'PluginRegistry', 'DevicePlugin',
+    'PDDataBus', 'PDDataBusSignals',
+]

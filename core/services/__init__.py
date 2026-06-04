@@ -17,6 +17,16 @@ from .mcgs_service import MCGSService, MCGSReadResult
 from .history_service import HistoryService
 from .anomaly_service import AnomalyService
 
+# PD 服务（可选，不影响 MCGS 系统）
+try:
+    from .pd_acquisition_service import AcquisitionResult, AcquisitionService
+    from .pd_alarm_service import ALARM_LEVELS, ALARM_TYPE_NAMES, PDAlarmService
+    from .pd_storage_service import PDStorageService
+except ImportError:
+    AcquisitionService = None  # type: ignore
+    PDAlarmService = None  # type: ignore
+    PDStorageService = None  # type: ignore
+
 __all__ = [
     "AuditLogService",
     "DataQualityService",
@@ -27,4 +37,11 @@ __all__ = [
     "MCGSReadResult",
     "HistoryService",
     "AnomalyService",
+    # PD 服务
+    "AcquisitionService",
+    "AcquisitionResult",
+    "PDAlarmService",
+    "ALARM_LEVELS",
+    "ALARM_TYPE_NAMES",
+    "PDStorageService",
 ]

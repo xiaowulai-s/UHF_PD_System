@@ -592,3 +592,14 @@ class ActionCard(QFrame):
 # ═══════════════════════════════════════════════════════════
 
 from .visual import AnimatedStatusBadge, RealtimeChart
+
+# UHF PD 分析控件 (PyQtGraph)
+try:
+    from .waveform_widget import WaveformWidget
+    from .prpd_widget import PRPDWidget, PRPDDisplayMode
+    from .prps_widget import PRPSWidget
+    from .fft_widget import FFTWidget
+    from .trend_chart_widget import TrendChartWidget
+except ImportError as e:
+    import logging
+    logging.getLogger(__name__).warning("部分 PD 分析控件加载失败: %s", e)

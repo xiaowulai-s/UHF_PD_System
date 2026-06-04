@@ -23,6 +23,12 @@ from .repository.base import BaseRepository
 from .repository.device_repository import DeviceRepository
 from .repository.historical_repository import HistoricalDataRepository
 
+# PD 监测模型（可选）
+try:
+    from .pd_models import PDAlarmModel, PDChannelModel, PDDeviceModel, PDEventModel, PDTrendDataModel
+except ImportError:
+    pass
+
 __all__ = [
     "Base",
     "DeviceModel",
@@ -43,4 +49,10 @@ __all__ = [
     "HistoricalDataRecorder",
     "AlarmRulePersistenceManager",
     "DeviceStatusSynchronizer",
+    # PD 监测模型
+    "PDDeviceModel",
+    "PDChannelModel",
+    "PDEventModel",
+    "PDTrendDataModel",
+    "PDAlarmModel",
 ]
