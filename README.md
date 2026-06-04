@@ -1,39 +1,38 @@
-# 工业设备管理系统 (Equipment Management System) v2.1.0
+# 工业设备监控与局放监测系统
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![PySide6](https://img.shields.io/badge/PySide6-6.6%2B-green.svg)](https://pypi.org/project/PySide6/)
-[![Version](https://img.shields.io/badge/Version-2.1.0-orange.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+本工程包含两套独立的工业上位机系统，共用同一套 UI 组件库和基础架构：
+
+| 系统 | 版本 | 入口 | 说明 |
+|------|------|------|------|
+| **MCGS 设备管理系统** | v2.1.0 | `main.py` | Modbus TCP/RTU 工业设备监控 |
+| **UHF 局放监测系统** | v1.0.1 | `pd_main.py` | 超高频局部放电在线监测 |
+
+---
+
+# MCGS 设备管理系统 (Equipment Management System)
+
 [![MCGS](https://img.shields.io/badge/MCGS-Modbus_TCP-integrationred.svg)](MCGS.md)
 
 基于 **PySide6** 和 **Modbus 协议** 的工业设备上位机监控软件，采用 **四层解耦 + 服务化架构**，支持 **MCGS 触摸屏集成**、多设备并发管理、实时数据可视化和智能故障恢复。
 
 > **v2.1.0** — 日志系统重构 (structlog 中文完美显示)、编码安全加固、连接失败日志去重、PBKDF2 密码升级、冗余文件清理
 
----
-
 ## 核心特性
 
-### 🔌 MCGS 触摸屏集成（v2.0 核心）
+### Modbus 通信
 
 | 特性 | 说明 |
 |------|------|
-| **Modbus TCP 通信** | 上位机作为 Client，MCGS 触摸屏作为 Server（Slave），端口 502 |
+| **Modbus TCP** | 上位机作为 Client，MCGS 触摸屏作为 Server（Slave），端口 502 |
+| **Modbus RTU** | 串口通信（RS485/RS232），TOCTOU 安全读取，CRC-16 校验 |
+| **Modbus ASCII** | ASCII 编码串口通信，LRC 校验 |
 | **批量寄存器读取** | 单次请求读取全部变量，高性能低延迟 |
-| **4种字节序支持** | ABCD / BADC / CDAB / DCBA，适配各品牌 PLC |
-| **7种数据类型** | uint16 / int16 / uint32 / int32 / float32 等 |
-| **配置驱动** | JSON 配置文件定义设备、地址、类型、缩放因子 |
-| **自动轮询** | 可配置轮询间隔（默认 1s），QTimer 驱动 |
-| **DataBus 数据总线** | 发布/订阅模式，UI 与通信层完全解耦 |
-| **实时监控面板** | 数据卡片 + 寄存器表格 + 趋势图 + 日志 |
-
-### 协议支持
-
-- **Modbus TCP** — 以太网通信，FC08 诊断心跳 + TCP KeepAlive 双重保活
-- **Modbus RTU** — 串口通信（RS485/RS232），TOCTOU 安全读取，CRC-16 校验
-- **Modbus ASCII** — ASCII 编码串口通信，LRC 校验
-- **4 种字节序** — ABCD（大端）/ BADC / CDAB（小端）/ DCBA
-- **7 种数据类型** — Coil / DiscreteInput / HoldingInt16 / Int32 / Float32 / InputInt16 / Float32
+| **4 种字节序** | ABCD（大端）/ BADC / CDAB / DCBA |
+| **7 种数据类型** | uint16 / int16 / uint32 / int32 / float32 / bool / coil |
 
 ### 设备管理
 
@@ -52,23 +51,28 @@
 - 随机抖动防惊群（Jitter）
 - 故障检测与诊断
 - 恢复状态查询与统计分析
-- 信号驱动的恢复事件通知
 
 ### 通信驱动
 
 - **TCPDriver** — FC08 Modbus 诊断心跳（10s 间隔），TCP KeepAlive（10s/5s/3次），线程安全
-- **SerialDriver** — TOCTOU 安全读取（v2.0），混合/阻塞/非阻塞三种模式，自适应波特率超时
+- **SerialDriver** — TOCTOU 安全读取，混合/阻塞/非阻塞三种模式，自适应波特率超时
 - **BaseDriver** — QMutex 缓冲区保护，统一信号接口
-- shiboken6 全面对象生命周期保护
 
 ### 数据可视化
 
 - **DataCard** — 数据卡片，实时值 + 状态 + 趋势
 - **Gauge** — Canvas 仪表盘，弧形进度条
-- **TrendChart** — Canvas 趋势图
-- **RealTimeChart** — pyqtgraph 高性能实时曲线图（支持缩放/平移/多系列）
+- **RealTimeChart** — pyqtgraph 高性能实时曲线图
 - **DynamicMonitorPanel** — 动态监控面板，支持卡片布局自由编排
 - **HistoryChartWidget** — 历史数据趋势图
+
+### 报警系统
+
+- 四级报警：信息 / 警告 / 错误 / 严重
+- 四类阈值：高高(HH) / 高(H) / 低(L) / 低低(LL)
+- 死区控制 + 冷却机制，防止报警风暴
+- 8 种错误智能分类
+- 报警确认 + 历史记录 + 统计分析
 
 ### UI 组件库
 
@@ -76,361 +80,311 @@
 - **输入控件**：LineEdit / ComboBox / InputWithLabel / Checkbox
 - **卡片组件**：DataCard / InfoCard / ActionCard
 - **表格组件**：DeviceTree / DataTable / DeviceTable
-- **状态组件**：StatusLabel / StatusBadge / AnimatedStatusBadge
-- **可视化组件**：ModernGauge / RealtimeChart
+- **状态组件**：StatusBadge / AnimatedStatusBadge
 - **主题管理**：ThemeManager（Fluent Design 风格浅色主题）+ DesignTokens 设计令牌系统
 - **动画调度**：AnimationScheduler（全局单定时器，CPU 占用降低 80%+）
 
-### 报警系统
-
-- 四级报警：信息(INFO) / 警告(WARNING) / 错误(ERROR) / 严重(CRITICAL)
-- 四类阈值：高高(HH) / 高(H) / 低(L) / 低低(LL)
-- 死区控制 + 冷却机制，防止报警风暴
-- 8 种错误智能分类
-- 通知渠道：弹窗 / 声音 / 自定义
-- 报警确认 + 历史记录 + 统计分析
-
----
-
-## 系统架构
+## MCGS 系统架构
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                  UI 层 (PySide6 Widgets)               │
-│    MainWindow + Controllers + Panels + Dialogs        │
-│         ┌─ MCGSController (MCGS触摸屏通信)             │
-│         └─ MonitorPageController (监控页)              │
-├──────────────────────────────────────────────────────┤
-│              设备管理层 (DeviceManagerFacade v4.0)      │
-│   Registry + Scheduler + Recovery + Configuration     │
-│   GroupManager + Lifecycle + DataPersistence          │
-├──────────────────┬───────────────────────────────────┤
-│  MCGS 通信层     │      通用通信驱动层                 │
-│  MCGSReader      │     TCP / Serial Driver            │
-│  MCGSService     │     BaseDriver                     │
-│  MCGSController  │                                    │
-├──────────────────┴───────────────────────────────────┤
-│                协议层 (Modbus Protocol)                │
-│       TCP + RTU + ASCII + CRC-16 / LRC               │
-│           ByteOrderConfig + ProtocolRegistry          │
-├──────────────────────────────────────────────────────┤
-│              数据总线 (DataBus v2.0)                   │
-│     Publish/Subscribe — 单向数据流 — 解耦核心          │
-├──────────────────────────────────────────────────────┤
-│            数据持久化层 (SQLite WAL)                   │
-│      DatabaseManager + Repository + Services         │
-│              7 ORM Models + 5 Repositories            │
-└──────────────────────────────────────────────────────┘
+UI 层 (PySide6 Widgets)
+    MainWindow + Controllers + Panels + Dialogs
+    ├─ MCGSController (MCGS触摸屏通信)
+    └─ MonitorPageController (监控页)
+        ↓
+设备管理层 (DeviceManagerFacade v4.0)
+    Registry + Scheduler + Recovery + Configuration
+    GroupManager + Lifecycle + DataPersistence
+        ↓
+通信驱动层
+    TCPDriver / SerialDriver / BaseDriver
+        ↓
+协议层 (Modbus Protocol)
+    TCP + RTU + ASCII + CRC-16 / LRC
+    ByteOrderConfig + ProtocolRegistry
+        ↓
+数据总线 (DataBus v2.0) — 发布/订阅模式
+        ↓
+数据持久化层 (SQLite WAL)
+    DatabaseManager + Repository + Services
+    7 ORM Models + 5 Repositories
 ```
-
-### MCGS 数据流架构
-
-```
-┌──────────┐    RS485     ┌──────────┐   Modbus TCP   ┌──────────┐
-│  传感器   │ ──────────→ │  MCGS    │ ─────────────→ │  上位机   │
-│(温度/湿度)│   RTU从站   │  触摸屏   │   Server:502   │  Client  │
-└──────────┘             └──────────┘                └────┬─────┘
-                                                            │
-                        ┌───────────────────────────────────┘
-                        ↓
-              ┌─────────────────────┐
-              │  MCGSModbusReader   │ ← 批量读取 Holding Registers
-              │  (pymodbus 3.x)     │
-              └─────────┬───────────┘
-                        ↓
-              ┌─────────────────────┐
-              │   MCGSService       │ ← 数据解析 + 类型转换
-              └─────────┬───────────┘
-                        ↓
-              ┌─────────────────────┐
-              │    DataBus v2.0     │ ← 发布/订阅
-              └─────────┬───────────┘
-                        ↓
-              ┌─────────────────────┐
-              │  UI Monitor Panel   │ ← 卡片/表格/图表/日志
-              └─────────────────────┘
-```
-
----
 
 ## 项目结构
 
 ```
-equipment-management/
-├── main.py                           # 程序入口
-├── config.json                       # 系统配置
-├── config/
-│   └── devices.json                  # MCGS 设备配置
-├── core/                             # 核心源码
-│   ├── communication/                # 通信驱动层
-│   │   ├── tcp_driver.py             # TCP 驱动 + FC08心跳 + KeepAlive
-│   │   ├── serial_driver.py          # 串口驱动 (TOCTOU安全)
-│   │   └── base_driver.py            # 驱动抽象基类
-│   ├── data/                         # 数据持久化层
-│   │   ├── models.py                 # ORM 模型 (7表)
-│   │   ├── repository/               # Repository 模式 (5仓库)
-│   │   ├── cleanup_scheduler.py      # 定时数据清理
-│   │   └── historical_recorder.py    # 历史数据记录
-│   ├── device/                       # 设备管理层 (v4.0)
-│   │   ├── device_manager_facade.py  # 统一入口 (Facade)
-│   │   ├── device_manager.py         # 旧版管理器 (向后兼容)
-│   │   ├── device_registry.py        # 注册中心 (CRUD)
-│   │   ├── polling_scheduler.py      # 轮询调度
-│   │   ├── fault_recovery_service.py # 故障恢复
-│   │   ├── configuration_service.py  # 配置管理
-│   │   ├── device_factory.py         # 设备工厂
-│   │   ├── connection_factory.py     # 连接工厂
-│   │   ├── device_models.py          # 数据模型 (dataclass)
-│   │   └── interfaces.py             # 接口定义 (依赖注入)
-│   ├── engine/                       # 引擎层
-│   │   ├── gateway_engine.py         # 网关引擎
-│   │   ├── heartbeat_manager.py      # 心跳管理
-│   │   └── reconnect_policy.py       # 重连策略
-│   ├── foundation/                   # 基础设施层
-│   │   ├── data_bus.py               # DataBus (发布/订阅)
-│   │   ├── plugin_registry.py        # 插件注册表
-│   │   └── config_store.py           # 全局配置存储
-│   ├── protocols/                    # 协议层
-│   │   ├── modbus_protocol.py        # Modbus 协议实现
-│   │   └── byte_order_config.py      # 字节序配置
-│   ├── services/                     # 业务服务层
-│   │   ├── mcgs_service.py           # MCGS 读写服务
-│   │   ├── history_service.py        # 历史数据服务
-│   │   ├── report_service.py         # 报表服务
-│   │   └── anomaly_service.py        # 异常检测服务
-│   ├── utils/                        # 工具模块
-│   │   ├── mcgs_modbus_reader.py     # MCGS Modbus 读取器
-│   │   ├── alarm_manager.py          # 报警管理
-│   │   ├── history_storage.py        # 历史存储引擎
-│   │   ├── permission_manager.py     # 权限管理
-│   │   ├── data_exporter.py          # 数据导出
-│   │   └── logger.py                 # 结构化日志 (structlog)
-│   ├── plugins/                      # 协议插件
-│   └── version.py                    # 版本号 v2.0.0
-├── ui/                               # UI 层
-│   ├── main_window.py                # 主窗口 (信号总调度)
-│   ├── controllers/                  # 控制器层
-│   │   ├── mcgs_controller.py        # MCGS 通信控制器
-│   │   ├── device_controller.py      # 设备管理控制器
-│   │   ├── monitor_page_controller.py # 监控页控制器
-│   │   └── status_bar_controller.py  # 状态栏控制器
-│   ├── dialogs/                      # 对话框
-│   │   ├── mcgs_config_dialog.py     # MCGS 配置编辑器
-│   │   ├── device_scan_dialog.py     # 设备扫描对话框
-│   │   └── add_device_dialog.py      # 添加设备对话框
-│   ├── widgets/                      # 自定义组件库
-│   │   ├── visual.py                 # DataCard/Gauge/TrendChart
-│   │   ├── history_chart_widget.py   # 历史趋势图
-│   │   ├── dynamic_monitor_panel.py  # 动态监控面板
-│   │   └── __init__.py               # DeviceTree 等基础组件
-│   ├── panels/                       # 面板模块
-│   └── design_tokens.py              # 设计令牌系统
-├── tests/                            # 测试
-├── docs/                             # 文档
-├── MCGS.md                           # MCGS 集成文档
-├── CHANGELOG.md                      # 变更日志
-└── README.md                         # 本文件
+├── main.py                     # MCGS 系统入口
+├── config.json                 # MCGS 系统配置
+├── config/devices.json         # MCGS 设备配置
+├── core/
+│   ├── communication/          # TCP/串口驱动
+│   ├── protocols/              # Modbus 协议栈
+│   ├── device/                 # 设备管理层 (v4.0)
+│   │   ├── device_manager_facade.py
+│   │   ├── polling_scheduler.py
+│   │   ├── fault_recovery_service.py
+│   │   └── ...
+│   ├── engine/                 # 网关引擎
+│   ├── data/                   # 数据库模型 + Repository
+│   ├── services/               # MCGS 业务服务
+│   ├── foundation/             # DataBus 事件总线
+│   ├── plugins/                # 协议插件
+│   └── utils/                  # 报警/权限/日志/导出
+├── ui/
+│   ├── main_window.py          # MCGS 主窗口
+│   ├── controllers/            # 页面控制器
+│   ├── dialogs/                # MCGS 配置对话框
+│   ├── widgets/                # 组件库
+│   └── panels/                 # 监控面板
+└── tests/
 ```
 
----
-
-## 快速开始
-
-### 环境要求
-
-- Python 3.10+
-- Windows 10/11
-- MCGS 触摸屏（或 McgsPro 模拟器）— 可选
-
-### 安装与运行
+## 安装与运行
 
 ```bash
-# 克隆项目
-git clone https://github.com/xiaowulai-s/Equipment-Management.git
-cd Equipment-Management
+pip install -e .
 
-# 创建虚拟环境
-python -m venv venv
-venv\Scripts\activate
-
-# 安装依赖
-pip install -r requirements.txt
-
-# 运行
+# 运行 MCGS 系统
 python main.py
 ```
 
-### MCGS 快速连接
+---
 
-1. 编辑 `config/devices.json` 配置 MCGS 设备 IP 和端口
-2. 启动程序 → 点击 **「MCGS连接」** 按钮
-3. 自动进入监控页面，显示实时数据卡片和寄存器表格
+# UHF 局部放电在线监测系统 (UHF-PD-Monitor)
 
-```json
-{
-  "devices": [{
-    "id": "Device0",
-    "name": "MCGS触摸屏",
-    "ip": "192.168.31.239",
-    "port": 502,
-    "unit_id": 1,
-    "points": [
-      {"name": "Data0", "addr": 40001, "type": "uint16"},
-      {"name": "Data1", "addr": 40002, "type": "uint16"},
-      {"name": "Data2", "addr": 40003, "type": "uint16"},
-      {"name": "Data3", "addr": 40004, "type": "uint16"}
-    ]
-  }]
-}
+[![PyQtGraph](https://img.shields.io/badge/PyQtGraph-0.14%2B-green.svg)](https://pypi.org/project/pyqtgraph/)
+[![NumPy](https://img.shields.io/badge/NumPy-1.24%2B-blue.svg)](https://numpy.org/)
+
+基于 **PySide6 + PyQtGraph + NumPy** 的工业级超高频局部放电在线监测上位机软件。
+
+> **v1.0.1** — 实时波形 20FPS、PRPD/FFT/PRPS 分析、三级报警、数据模拟器
+
+## 核心特性
+
+### 信号分析
+
+| 模块 | 功能 | 性能 |
+|------|------|------|
+| **实时波形** | 缩放/拖拽/游标测量/自动量程/触发标记 | ≥20 FPS |
+| **PRPD 图谱** | 散点图/热力图/密度图三种模式、相位分布分析 | ≥10 FPS |
+| **FFT 频谱** | 峰值检测(含谐波识别)、频段统计(UHF四频段)、噪声估计、SNR | ≥10 FPS |
+| **PRPS 图谱** | 512×360 周期脉冲序列、滚动刷新 | 实时 |
+| **趋势分析** | 1h/24h/7d/30d 多时间维度、多指标叠加 | 实时 |
+
+### 报警管理
+
+- **三级报警体系**：严重(≥80%) / 一般(≥50%) / 提示(≥30%)
+- **六种报警类型**：局放超限 / 设备离线 / 光模块异常 / ADC异常 / 同步异常 / 存储不足
+- **防抖机制**：连续 N 次触发确认报警，消除误报
+- 报警事件列表 + 统计 + 规则配置 + 确认
+- 报警持久化到 SQLite 数据库
+
+### FPGA 通信协议
+
+```
+数据帧格式:
+┌──────┬──────┬────────┬────────┬──────────┬────────┬──────────┬──────┐
+│ 帧头 │ 长度 │ 设备ID │ 通道ID │ 时间戳   │数据类型│ 数据内容 │ CRC  │
+│ 2Byte│ 2Byte│ 2Byte  │ 2Byte  │ 8Byte    │ 1Byte  │ N Byte   │ 2Byte│
+└──────┴──────┴────────┴────────┴──────────┴────────┴──────────┴──────┘
+
+数据类型:
+0x01 WAVEFORM    波形数据      TCP 端口 5000: 控制通道
+0x02 PD_EVENT    局放事件      UDP 端口 6000: 数据通道
+0x03 FFT_RESULT  FFT 频谱      CRC-16/MODBUS 校验
+0x04 PRPD_RESULT PRPD 图谱
+0x05 PRPS_RESULT PRPS 图谱
+0x06 DEVICE_STATUS 设备状态
 ```
 
-### 核心依赖
+### 数据处理 Pipeline
 
-| 包 | 版本 | 用途 |
-|---|---|---|
-| [PySide6](https://pypi.org/project/PySide6/) | 6.6+ | Qt for Python UI 框架 |
-| [pymodbus](https://pypi.org/project/pymodbus/) | 3.x | Modbus 协议栈 |
-| [SQLAlchemy](https://www.pypi.org/project/SQLAlchemy/) | 2.0+ | 数据库 ORM |
-| [pyserial](https://pypi.org/project/pyserial/) | 3.5+ | 串口通信 |
-| [pyqtgraph](https://pypi.org/project/pyqtgraph/) | 0.13+ | 高性能数据可视化 |
-| [openpyxl](https://pypi.org/project/openpyxl/) | 3.1+ | Excel 导出 |
+```
+UDP 接收 → FpgaProtocol.feed() → 波形数据
+                                    ↓
+                          ┌─ 峰值检测 → DataBus(PD事件)
+                          ├─ FFT计算  → DataBus(FFT)
+                          ├─ PRPD更新 → DataBus(PRPD)  (指数衰减)
+                          └─ PRPS更新 → DataBus(PRPS)
+```
+
+### 信号处理算法
+
+| 模块 | 算法 | 说明 |
+|------|------|------|
+| **FFTProcessor** | numpy.rfft + scipy.signal.find_peaks | 频谱计算、峰值检测、频段统计、SNR |
+| **PRPDProcessor** | 360×256 相位-幅值矩阵 | 散点/热力/密度、指数衰减、统计特征 |
+| **PRPSProcessor** | 512×360 滚动矩阵 | 周期脉冲序列、滑动平均 PRPD |
+| **PeakDetector** | scipy 自适应阈值 / 简化模式 | 脉冲参数(幅值/宽度/面积/能量/SNR) |
+| **RingBuffer** | collections.deque | 1,000,000 点线程安全环形缓冲 |
+
+### 模拟器（无需 FPGA）
+
+内置四种局放类型的波形模拟器，支持可调参数：
+
+```bash
+# 电晕放电 (270°~330° 负半周集中)
+python pd_main.py --simulator --pd-type corona
+
+# 沿面放电 (30°~90° 正半周集中)
+python pd_main.py --simulator --pd-type surface
+
+# 内部放电 (0°~60° 正半周初期)
+python pd_main.py --simulator --pd-type internal
+
+# 悬浮放电 (0°~360° 全相位分布)
+python pd_main.py --simulator --pd-type floating
+```
+
+### 系统架构
+
+```
+┌─────────────────────────────────────────────────┐
+│                  UI 层 (PySide6)                  │
+│  ┌──────────┬──────────┬──────────┬──────────┐   │
+│  │ 仪表板   │ 实时监测  │ 趋势分析  │ 报警管理  │   │
+│  ├──────────┼──────────┼──────────┼──────────┤   │
+│  │ 设备管理  │ 系统设置  │          │          │   │
+│  └──────────┴──────────┴──────────┴──────────┘   │
+├─────────────────────────────────────────────────┤
+│               控制器层 (Coordinator)              │
+│          PDSystemController                      │
+│    ┌──────────────────────────────────────┐      │
+│    │          PDDataBus 事件总线           │      │
+│    └──────────────────────────────────────┘      │
+├─────────────────────────────────────────────────┤
+│              服务层 (Services)                    │
+│  AcquisitionService  PDAlarmService              │
+│  PDStorageService                                │
+├─────────────────────────────────────────────────┤
+│              通信层 (Communication)               │
+│  FpgaProtocol  UDPDriver  TCPDriver              │
+├─────────────────────────────────────────────────┤
+│              信号处理 (Processing)                │
+│  RingBuffer  FFTProcessor  PRPDProcessor         │
+│  PRPSProcessor  PeakDetector                     │
+└─────────────────────────────────────────────────┘
+```
+
+### 项目结构
+
+```
+├── pd_main.py                     # PD 系统入口
+├── pd_build.spec                  # PyInstaller 打包配置
+├── core/
+│   ├── processing/                # 信号处理核心
+│   │   ├── fft_processor.py       # FFT 频谱分析
+│   │   ├── prpd_processor.py      # PRPD 图谱
+│   │   ├── prps_processor.py      # PRPS 图谱
+│   │   ├── peak_detector.py       # 峰值检测
+│   │   └── ring_buffer.py         # 环形缓冲区
+│   ├── communication/             # FPGA 通信
+│   │   ├── fpga_protocol.py       # 协议解析器
+│   │   └── udp_driver.py          # UDP 数据通道
+│   ├── services/                  # PD 业务服务
+│   │   ├── pd_acquisition_service.py  # 采集服务
+│   │   ├── pd_alarm_service.py       # 报警服务
+│   │   └── pd_storage_service.py     # 存储服务
+│   ├── data/pd_models.py          # PD 数据库模型
+│   └── foundation/pd_data_bus.py  # PD 事件总线
+├── ui/
+│   ├── pd_main_window.py          # PD 主窗口
+│   ├── pd_controller.py           # 系统总控制器
+│   ├── pages/                     # 6 个功能页面
+│   │   ├── dashboard_page.py      # 系统仪表板
+│   │   ├── realtime_monitor_page.py # 实时监测
+│   │   ├── trend_page.py          # 趋势分析
+│   │   ├── alarm_page.py          # 报警管理
+│   │   ├── device_page.py         # 设备管理
+│   │   └── settings_page.py       # 系统设置
+│   └── widgets/                   # 分析控件
+│       ├── waveform_widget.py     # 实时波形控件
+│       ├── prpd_widget.py         # PRPD 图谱控件
+│       ├── prps_widget.py         # PRPS 图谱控件
+│       ├── fft_widget.py          # FFT 频谱控件
+│       └── trend_chart_widget.py  # 趋势曲线控件
+├── config/pd_default_config.json  # PD 系统配置
+└── tests/test_pd_integration.py   # 25 个集成测试
+```
+
+## 安装与运行
+
+```bash
+# 安装基础依赖
+pip install -e .
+
+# 安装可选依赖（推荐: scipy+OpenGL）
+pip install -e ".[full]"
+
+# 运行 PD 监测系统（需 FPGA 硬件）
+python pd_main.py
+
+# 模拟器模式（自动生成局放数据，无需硬件）
+python pd_main.py --simulator
+```
 
 ---
 
-## 文档
+# 共同基础架构
 
-| 文档 | 说明 |
-|---|---|
-| [MCGS 集成指南](MCGS.md) | MCGS 触摸屏接入规范、数据流设计、AI 开发流程 |
-| [更新日志](CHANGELOG.md) | 版本变更记录 |
-| [项目架构文档](项目架构与功能文档.md) | 架构设计、模块说明、数据库表结构 |
-| [安装部署指南](docs/安装部署指南.md) | 打包部署和故障排除 |
-| [新架构说明](docs/architecture/新架构说明_v2.md) | v2.0 架构设计详解 |
+## 设计令牌系统 (DesignTokens)
 
----
+Fluent Design 风格统一 UI 规范：
+
+| 令牌 | 值 | 用途 |
+|------|-----|------|
+| 主色 | `#0969DA` | 按钮/选中态/链接 |
+| 成功 | `#1A7F37` | 在线/正常 |
+| 警告 | `#D29922` | 一般报警 |
+| 错误 | `#CF222E` | 严重报警/错误 |
+| 字体 | Segoe UI Variable | Windows 11 默认 |
+| 间距 | 4px 基数的 8pt 栅格 | 统一间距 |
+| 圆角 | 8px (标准) / 12px (卡片) | 统一圆角 |
+
+## 数据库
+
+| 系统 | 数据库 | 表数量 | ORM |
+|------|--------|--------|-----|
+| MCGS | `data/equipment_management.db` | 7 表 | SQLAlchemy |
+| PD | `data/pd_monitor.db` | 5 表 | SQLAlchemy |
 
 ## 测试
 
 ```bash
-# 运行所有测试
+# MCGS 测试
 pytest tests/ -v
 
-# 运行基础功能测试
-pytest tests/test_basic.py -v
-
-# 运行 MCGS 集成测试
-pytest tests/ -k mcgs -v
-
-# 运行覆盖率报告
-pytest tests/ --cov=core --cov-report=html
+# PD 集成测试（25 个用例）
+pytest tests/test_pd_integration.py -v
 ```
 
 ---
 
-## 数据库
+# 版本历史
 
-### ORM 模型（7 表）
+## MCGS 系统
 
-| 表 | 模型类 | 说明 |
-|---|---|---|
-| devices | DeviceModel | 设备信息（名称/类型/协议/连接状态） |
-| register_maps | RegisterMapModel | 寄存器映射（地址/类型/缩放/单位） |
-| historical_data | HistoricalDataModel | 历史数据（值/原始值/质量码/时间戳） |
-| alarms | AlarmModel | 报警记录（阈值/确认/时间戳） |
-| alarm_rules | AlarmRuleModel | 报警规则（启用/阈值/描述） |
-| system_logs | SystemLogModel | 系统日志（级别/模块/异常） |
-| device_status_history | DeviceStatusHistoryModel | 设备状态历史 |
+### v2.1.0 (2026-05-19)
+- 日志系统重构 (structlog 中文完美显示)
+- 编码安全加固、连接失败日志去重
+- PBKDF2 密码升级、冗余文件清理
 
-### SQLite 配置
+## PD 系统
 
-- **WAL 模式** — 读写并发不阻塞
-- **外键约束** — CASCADE 级联删除
-- **复合索引** — (device_id, timestamp) 高频查询优化
+### v1.0.1 (2026-06-03)
+- 实时监测新增设备/通道切换下拉框
+- 报警统计卡片遮挡修复、报警数据同步修复
+- 设备列表持久化（JSON 保存/加载）
+- 设置变更实时推送到运行中服务
+- 性能优化：PRPD/趋势 list → deque、PRPS 原地切片
+- OpenGL 加速、窗口状态持久化
 
----
-
-## 版本历史
-
-### v2.0.0 (2026-04-29) — 正式发布
-
-#### MCGS 触摸屏集成（核心亮点）
-
-- **MCGSModbusReader** — 基于 pymodbus 3.x 的 Modbus TCP 客户端
-  - 批量读取 Holding Registers（FC03），单次请求获取全部变量
-  - 支持 4 种字节序（ABCD/BADC/CDAB/DCBA）
-  - 支持 7 种数据类型（uint16/int16/uint32/int32/float32 等）
-  - 连接管理 + 超时处理 + 自动重连
-- **MCGSService** — 数据解析服务层
-  - 原始寄存器 → 结构化数据转换
-  - DataBus 发布/订阅推送
-  - 数据质量标记
-- **MCGSController** — Qt 控制器（Signal/Slot）
-  - QTimer 定时轮询（可配置间隔）
-  - QThreadPool 异步读取任务
-  - 设备连接/断开/轮询状态管理
-- **UI 监控面板**
-  - DataCard 数据卡片（实时数值 + 地址标签）
-  - 寄存器表格（地址/功能码/名称/值/单位）
-  - 系统日志面板（时间戳/级别/消息）
-  - 自动初始化监控面板（数据到达时自动创建卡片）
-- **MCGS 配置对话框** — IP/端口/点位/类型可视化配置
-- **devices.json 配置驱动** — JSON 定义设备参数，无需修改代码
-
-#### 架构升级（服务化重构）
-
-- 设备管理层 v4.0 模块化重构（7 个独立服务）
-- `DeviceManagerFacade` 外观类统一入口
-- 设备模型 v3.2 配置驱动重构（dataclass 零副作用）
-- DataBus v2.0 发布/订阅模式
-- 接口定义层（依赖注入支持）
-
-#### 通信增强
-
-- TCP 驱动 FC08 心跳 + KeepAlive 双保活
-- 串口驱动 TOCTOU 安全修复（v2.0）
-- 字节序配置模块 + 协议插件注册表
-
-#### UI 增强
-
-- DesignTokens 设计令牌系统
-- 全局动画调度器（CPU 降低 80%+）
-- 动态监控面板 + 历史趋势图
-- 操作撤销 + 权限管理（三级 + PBKDF2-HMAC-SHA256）
-
-### v1.6.0 ~ v1.0.0
-
-详见 [CHANGELOG.md](CHANGELOG.md)
-
----
-
-## 设计规范
-
-| 项目 | 值 |
-|---|---|
-| 主色 | `#2196F3` (科技蓝) |
-| 辅助色 | `#00BCD4` (青色) |
-| 成功 | `#4CAF50` |
-| 警告 | `#FFC107` |
-| 错误 | `#F44336` |
-| 设计令牌 | DesignTokens 系统化管控颜色/字体/间距 |
-
----
-
-## 开发
-
-### 构建
-
-```bash
-pyinstaller build.spec
-```
-
-### 代码规范
-
-```bash
-flake8 core/ ui/ --config .flake8
-black core/ ui/
-mypy core/ ui/
-```
+### v1.0.0 (2026-06)
+- 初始版本：实时波形 20FPS、PRPD/FFT/PRPS 分析
+- 趋势分析 (1h/24h/7d/30d)、三级报警管理
+- FPGA 通信协议 (TCP+UDP)、数据模拟器
+- Fluent Design 界面、6 个功能页面
+- 25 个集成测试、PyInstaller 打包
 
 ---
 
@@ -440,4 +394,4 @@ MIT License
 
 ---
 
-**版本**: v2.0.0 | **更新**: 2026-04-29 | **状态**: 正式发布 ✅
+**MCGS 系统**: v2.1.0 | **PD 系统**: v1.0.1 | **更新**: 2026-06-03
