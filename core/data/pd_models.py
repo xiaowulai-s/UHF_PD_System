@@ -80,7 +80,6 @@ class PDChannelModel(Base):
     frequency_max_mhz = Column(Float, default=3000)
 
     device = relationship("PDDeviceModel", back_populates="channels")
-    events = relationship("PDEventModel", back_populates="channel", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("idx_pd_channel_device", "device_id"),
@@ -111,7 +110,7 @@ class PDEventModel(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     device_id = Column(String(64), nullable=False, index=True)
-    channel_id = Column(Integer, ForeignKey("pd_channels.id", ondelete="CASCADE"), nullable=True)
+    channel_id = Column(Integer, nullable=True)  # 逻辑通道号，非 FK（避免与 pd_channels 耦合）
     timestamp = Column(DateTime, default=utc_now, index=True)
     phase = Column(Float, nullable=True)  # 相位 0~360°
     amplitude = Column(Float, nullable=False)  # 幅值 mV
@@ -123,8 +122,6 @@ class PDEventModel(Base):
     temperature = Column(Float, nullable=True)
     humidity = Column(Float, nullable=True)
     raw_data = Column(Text, nullable=True)  # JSON 原始数据
-
-    channel = relationship("PDChannelModel", back_populates="events")
 
     __table_args__ = (
         Index("idx_pd_event_device_time", "device_id", "timestamp"),
