@@ -14,12 +14,12 @@ PRPD 图谱控件 - PRPDWidget
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QTransform
+from PySide6.QtCore import Signal
+from PySide6.QtGui import QTransform
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from ui.design_tokens import DT
@@ -51,8 +51,10 @@ class PRPDWidget(QWidget):
         self._amplitude_bins = 256
         self._max_amplitude = 100.0
 
-        self._scatter_data: List[Tuple[float, float]] = []
-        self._heatmap_data: Optional[np.ndarray] = None
+        self._scatter_phases: List[float] = []
+        self._scatter_amplitudes: List[float] = []
+        self._heatmap_data: Optional[np.ndarray] = None  # 原始矩阵
+        self._heatmap_log: Optional[np.ndarray] = None  # log1p 后的显示数据
         self._display_mode = "heatmap"
 
         self._setup_ui()
@@ -75,10 +77,13 @@ class PRPDWidget(QWidget):
         self._info_label.setStyleSheet(f"color: {DT.C.TEXT_TERTIARY}; font-size: 11px;")
         header.addWidget(self._info_label)
 
-        # 模式选择
+        # 模式选择（默认热力图）
         self._mode_combo = QComboBox()
+        self._mode_combo.blockSignals(True)
         for mode in PRPDDisplayMode:
             self._mode_combo.addItem(mode.value, mode.name.lower())
+        self._mode_combo.setCurrentIndex(1)  # 默认热力图
+        self._mode_combo.blockSignals(False)
         self._mode_combo.setFixedHeight(26)
         self._mode_combo.setStyleSheet(
             f"""
@@ -165,6 +170,8 @@ class PRPDWidget(QWidget):
         if np.max(img_data) > 0:
             img_data = np.log1p(img_data)
 
+        self._heatmap_log = img_data.copy()  # 保存用于模式恢复
+
         self._image_item.setImage(img_data, autoLevels=True)
 
         # 设置坐标映射: X: 0~360°, Y: 0~max_amplitude
@@ -178,7 +185,8 @@ class PRPDWidget(QWidget):
 
         # 设置 colormap
         cmap = pg.colormap.get(self.COLORMAP)
-        self._image_item.setColorMap(cmap)
+        if cmap is not None:
+            self._image_item.setColorMap(cmap)
 
         # 更新信息
         total = int(np.sum(matrix))
@@ -192,15 +200,15 @@ class PRPDWidget(QWidget):
             phases: 相位列表 (0~360°)
             amplitudes: 幅值列表 (mV)
         """
+        self._scatter_phases = list(phases)
+        self._scatter_amplitudes = list(amplitudes)
+
         if len(phases) == 0:
             return
 
-        spots = []
-        for p, a in zip(phases, amplitudes):
-            spots.append({"pos": (p, a), "size": 4})
-
+        spots = [{"pos": (p, a), "size": 4} for p, a in zip(phases, amplitudes)]
         self._scatter_plot.setData(spots)
-        self._image_item.setVisible(False)
+        self._image_item.setVisible(self._display_mode == "heatmap" or self._display_mode == "density")
         self._scatter_plot.setVisible(self._display_mode == "scatter")
 
         self._info_label.setText(f"{len(phases)} 事件")
@@ -217,24 +225,57 @@ class PRPDWidget(QWidget):
         self._display_mode = mode_name
         self.mode_changed.emit(mode_name)
 
-        is_scatter = mode_name == "scatter"
-        is_density = mode_name == "density"
+        if mode_name == "scatter":
+            # 散点图模式 — X:相位 0-360°, Y:幅值(自动)
+            self._scatter_plot.setVisible(True)
+            self._image_item.setVisible(False)
+            self._plot_widget.setLabel("left", "幅值", units="mV")
+            self._plot_widget.setLabel("bottom", "相位", units="°")
+            if self._scatter_phases:
+                spots = [
+                    {"pos": (p, a), "size": 4}
+                    for p, a in zip(self._scatter_phases[:5000], self._scatter_amplitudes[:5000])
+                ]
+                self._scatter_plot.setData(spots)
+                y_max = max(self._scatter_amplitudes[:5000]) * 1.1
+                self._plot_widget.setXRange(0, 360)
+                self._plot_widget.setYRange(0, y_max)
+            self._plot_widget.showGrid(x=True, y=True, alpha=0.2)
 
-        self._scatter_plot.setVisible(is_scatter)
-        self._image_item.setVisible(not is_scatter)
-
-        if is_density and self._heatmap_data is not None:
+        elif mode_name == "density":
+            # 密度图模式 — X:相位 0-360°, Y:幅值
+            self._scatter_plot.setVisible(False)
+            self._image_item.setVisible(True)
+            self._plot_widget.setLabel("left", "幅值", units="mV")
+            self._plot_widget.setLabel("bottom", "相位", units="°")
+            self._plot_widget.setXRange(0, 360)
+            self._plot_widget.setYRange(0, self._max_amplitude)
             self._apply_density_smooth()
+            self._plot_widget.showGrid(x=True, y=True, alpha=0.2)
+
+        else:
+            # 热力图模式（默认）— X:相位 0-360°, Y:幅值
+            self._scatter_plot.setVisible(False)
+            self._image_item.setVisible(True)
+            self._plot_widget.setLabel("left", "幅值", units="mV")
+            self._plot_widget.setLabel("bottom", "相位", units="°")
+            self._plot_widget.setXRange(0, 360)
+            self._plot_widget.setYRange(0, self._max_amplitude)
+            if self._heatmap_log is not None:
+                self._image_item.setImage(self._heatmap_log, autoLevels=True)
+            self._plot_widget.showGrid(x=True, y=True, alpha=0.2)
 
     def _apply_density_smooth(self) -> None:
-        """应用密度图平滑"""
+        """应用密度图平滑（在 log1p 空间上平滑）"""
         if self._heatmap_data is None:
             return
         try:
             from scipy.ndimage import gaussian_filter
 
-            smoothed = gaussian_filter(self._heatmap_data.T, sigma=1.5)
-            self._image_item.setImage(smoothed, autoLevels=True)
+            # 在 log1p 空间平滑，保持一致的数据空间
+            smoothed = gaussian_filter(self._heatmap_log, sigma=1.5) if self._heatmap_log is not None else None
+            if smoothed is not None:
+                self._image_item.setImage(smoothed, autoLevels=True)
         except ImportError:
             pass
 
@@ -243,7 +284,9 @@ class PRPDWidget(QWidget):
         self._scatter_plot.setData([])
         self._image_item.clear()
         self._heatmap_data = None
-        self._scatter_data.clear()
+        self._heatmap_log = None
+        self._scatter_phases.clear()
+        self._scatter_amplitudes.clear()
         self._info_label.setText("0 事件")
 
     def set_title(self, title: str) -> None:

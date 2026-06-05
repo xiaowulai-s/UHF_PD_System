@@ -10,29 +10,13 @@ UHF PD Monitor 主窗口
 
 from __future__ import annotations
 
-from typing import Optional
-
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QFont
-from PySide6.QtWidgets import (
-    QHBoxLayout,
-    QLabel,
-    QMainWindow,
-    QMenu,
-    QMenuBar,
-    QMessageBox,
-    QSizePolicy,
-    QStackedWidget,
-    QStatusBar,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtCore import QTimer
+from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QMainWindow, QMessageBox, QStackedWidget, QVBoxLayout, QWidget
 
 from core.utils.logger import get_logger
-
-from ui.app_styles import AppStyles
 from ui.design_tokens import DT
-from ui.pages import AlarmPage, DashboardPage, DevicePage, RealtimeMonitorPage, SettingsPage, TrendPage
+from ui.pages import AlarmPage, AnalysisPage, DashboardPage, DevicePage, RealtimeMonitorPage, SettingsPage, TrendPage
 from ui.widgets.nav_menu import NavMenu
 
 logger = get_logger("pd_main_window")
@@ -42,12 +26,13 @@ class PDMainWindow(QMainWindow):
     """UHF 局部放电在线监测系统主窗口"""
 
     APP_NAME = "UHF-PD-Monitor"
-    WINDOW_TITLE = f"超高频局部放电在线监测系统 v{__import__("sys").argv}"  # placeholder
+    WINDOW_TITLE = "超高频局部放电在线监测系统"
 
-    PAGE_KEYS = ["dashboard", "monitor", "trend", "alarm", "device", "settings"]
+    PAGE_KEYS = ["dashboard", "monitor", "analysis", "trend", "alarm", "device", "settings"]
     PAGE_TITLES = [
         "系统仪表板",
         "实时监测",
+        "数据分析",
         "趋势分析",
         "报警管理",
         "设备管理",
@@ -183,6 +168,7 @@ class PDMainWindow(QMainWindow):
         page_classes = [
             DashboardPage,
             RealtimeMonitorPage,
+            AnalysisPage,
             TrendPage,
             AlarmPage,
             DevicePage,

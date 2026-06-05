@@ -2,7 +2,6 @@
 """报警管理页面 - 完整实现"""
 
 from datetime import datetime
-from typing import List, Optional
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor
@@ -13,8 +12,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QPushButton,
-    QSizePolicy,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -63,14 +60,6 @@ class AlarmPage(QWidget):
         title.setStyleSheet(f"color: {DT.C.TEXT_PRIMARY};")
         header.addWidget(title)
         header.addStretch()
-
-        self._refresh_btn = SecondaryButton("刷新")
-        self._refresh_btn.clicked.connect(self._on_refresh)
-        header.addWidget(self._refresh_btn)
-
-        self._clear_btn = DangerButton("清除全部")
-        self._clear_btn.clicked.connect(self._on_clear_all)
-        header.addWidget(self._clear_btn)
 
         layout.addLayout(header)
 
@@ -136,12 +125,6 @@ class AlarmPage(QWidget):
         s_layout.addWidget(card_total, 1)
 
         s_layout.addStretch(2)
-        self._filter_combo = QComboBox()
-        self._filter_combo.addItems(["全部级别", "严重报警", "一般报警", "提示报警"])
-        self._filter_combo.setFixedHeight(30)
-        self._filter_combo.setStyleSheet(self._combo_style())
-        self._filter_combo.currentIndexChanged.connect(self._on_filter_changed)
-        s_layout.addWidget(self._filter_combo)
 
         layout.addWidget(stats_frame)
 
@@ -169,7 +152,16 @@ class AlarmPage(QWidget):
         l_title = QLabel("报警事件列表")
         l_title.setFont(DT.T.get_font(*DT.T.TITLE_MEDIUM[:2], "SemiBold"))
         l_title.setStyleSheet(f"color: {DT.C.TEXT_PRIMARY};")
-        list_layout.addWidget(l_title)
+        l_title_row = QHBoxLayout()
+        l_title_row.addWidget(l_title)
+        l_title_row.addStretch()
+        self._filter_combo = QComboBox()
+        self._filter_combo.addItems(["全部级别", "严重报警", "一般报警", "提示报警"])
+        self._filter_combo.setFixedHeight(28)
+        self._filter_combo.setStyleSheet(self._combo_style())
+        self._filter_combo.currentIndexChanged.connect(self._on_filter_changed)
+        l_title_row.addWidget(self._filter_combo)
+        list_layout.addLayout(l_title_row)
 
         self._alarm_table = QTableWidget()
         self._alarm_table.setColumnCount(7)
@@ -192,6 +184,13 @@ class AlarmPage(QWidget):
         self._btn_delete = SecondaryButton("删除选中")
         self._btn_delete.clicked.connect(self._on_delete_selected)
         btn_row.addWidget(self._btn_delete)
+        btn_row.addWidget(QLabel("", styleSheet=f"color: {DT.C.DIVIDER}; max-width: 1px; max-height: 20px;"))
+        self._clear_btn = DangerButton("清除全部")
+        self._clear_btn.clicked.connect(self._on_clear_all)
+        btn_row.addWidget(self._clear_btn)
+        self._refresh_btn = SecondaryButton("刷新")
+        self._refresh_btn.clicked.connect(self._on_refresh)
+        btn_row.addWidget(self._refresh_btn)
         btn_row.addStretch()
         list_layout.addLayout(btn_row)
 

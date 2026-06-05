@@ -1,20 +1,16 @@
 # -*- coding: utf-8 -*-
 """设备管理页面 - 完整实现"""
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, Optional
 
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
     QFrame,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLineEdit,
-    QPushButton,
-    QSizePolicy,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -23,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui.design_tokens import DT
-from ui.widgets import DangerButton, GhostButton, PrimaryButton, SecondaryButton, StatusBadge
+from ui.widgets import DangerButton, PrimaryButton, SecondaryButton, SuccessButton
 
 
 class DevicePage(QWidget):
@@ -51,12 +47,6 @@ class DevicePage(QWidget):
         title.setStyleSheet(f"color: {DT.C.TEXT_PRIMARY};")
         header.addWidget(title)
         header.addStretch()
-
-        self._btn_add = PrimaryButton("添加设备")
-        self._btn_add.clicked.connect(self._on_add_device)
-        header.addWidget(self._btn_add)
-        self._btn_scan = SecondaryButton("扫描设备")
-        header.addWidget(self._btn_scan)
 
         layout.addLayout(header)
 
@@ -113,13 +103,18 @@ class DevicePage(QWidget):
         layout.addWidget(self._device_table)
 
         btn_row = QHBoxLayout()
-        self._btn_connect = SecondaryButton("连接")
+        btn_row.setSpacing(DT.S.SM)
+        self._btn_connect = PrimaryButton("连接设备")
         self._btn_connect.clicked.connect(self._on_connect_device)
         btn_row.addWidget(self._btn_connect)
-        btn_del = DangerButton("删除")
+        btn_del = DangerButton("删除设备")
         btn_del.clicked.connect(self._on_delete_device)
         btn_row.addWidget(btn_del)
-        btn_row.addStretch()
+        self._btn_add = SuccessButton("添加设备")
+        self._btn_add.clicked.connect(self._on_add_device)
+        btn_row.addWidget(self._btn_add)
+        self._btn_scan = SecondaryButton("扫描设备")
+        btn_row.addWidget(self._btn_scan)
         layout.addLayout(btn_row)
 
         parent.addWidget(frame, 25)
@@ -174,14 +169,17 @@ class DevicePage(QWidget):
         )
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(DT.S.MD, DT.S.SM, DT.S.MD, DT.S.SM)
+        layout.setSpacing(2)
 
         title = QLabel("设备参数")
         title.setFont(DT.T.get_font(*DT.T.TITLE_MEDIUM[:2], "SemiBold"))
-        title.setStyleSheet(f"color: {DT.C.TEXT_PRIMARY};")
+        title.setStyleSheet(f"color: {DT.C.TEXT_PRIMARY}; margin: 0; padding: 0;")
+        title.setFixedHeight(24)
         layout.addWidget(title)
 
         form = QFormLayout()
-        form.setSpacing(8)
+        form.setSpacing(6)
+        form.setContentsMargins(0, 4, 0, 0)
 
         self._param_name = QLineEdit()
         self._param_name.setPlaceholderText("设备名称")
@@ -223,6 +221,8 @@ class DevicePage(QWidget):
         form.addRow("", self._param_sim)
 
         layout.addLayout(form)
+
+        layout.addStretch()
 
         btn_save = PrimaryButton("保存参数")
         btn_save.clicked.connect(self._on_save_params)
@@ -386,7 +386,7 @@ class DevicePage(QWidget):
                 status_item.setText(status_text.get(new_status, "未知"))
                 color = {0: DT.C.TEXT_TERTIARY, 1: DT.C.STATUS_SUCCESS}
                 status_item.setForeground(QColor(color.get(new_status, DT.C.TEXT_TERTIARY)))
-        self._btn_connect.setText("断开" if new_status == 1 else "连接")
+        self._btn_connect.setText("断开设备" if new_status == 1 else "连接设备")
 
     def _on_delete_device(self) -> None:
         """删除选中设备"""

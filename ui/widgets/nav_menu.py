@@ -10,10 +10,10 @@
 - 符合 Fluent Design 设计规范
 """
 
-from typing import Callable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from PySide6.QtCore import Property, QEasingCurve, QPropertyAnimation, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPaintEvent, QPen
+from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPaintEvent
 from PySide6.QtWidgets import QFrame, QSizePolicy, QVBoxLayout, QWidget
 
 from ui.design_tokens import DT
@@ -25,6 +25,7 @@ MenuItem = Tuple[str, str, str]
 DEFAULT_MENU_ITEMS: List[MenuItem] = [
     ("dashboard", "首页", "⌂"),  # ⌂
     ("monitor", "实时监测", "◉"),  # ◉
+    ("analysis", "数据分析", "▦"),  # ▦
     ("trend", "趋势分析", "↗"),  # ↗
     ("alarm", "报警管理", "⚠"),  # ⚠
     ("device", "设备管理", "⊞"),  # ⊞
