@@ -1,6 +1,35 @@
 # 更新日志 (CHANGELOG)
 
-## [1.0.1] - 2026-06-03
+## [1.0.3] - 2026-06-08
+
+### 重大变更
+
+#### PRPS 3D 散点图重构（OpenGL → Matplotlib）
+- **移除 pyqtgraph.opengl 实现**（~500 行代码）：删除 GLViewWidget、_GLAxisOverlay、_ColorBarWidget 等全部 OpenGL 组件
+- **替换为 Matplotlib 3D**（~130 行核心代码）：`FigureCanvasQTAgg` + `Axes3D` 嵌入 PySide6
+- **完整坐标轴系统**：X(相位°)/Y(工频周期n)/Z(放电量) 三轴标签 + 刻度 + 三面网格 + 边框线
+- **ColorBar 集成**：Matplotlib 原生 colorbar，Jet 色图映射，Discharge (a.u.) 标签
+
+### 新增功能
+
+#### PRPS 3D 图谱参数（与 plot_PRPS.py 完全一致）
+- `box_aspect=(1.45, 1.15, 1.20)` 视觉比例
+- `elev=36°, azim=-122°` 观察视角
+- `s=25` 散点大小，`cmap="jet"` 颜色映射
+- `shrink=0.88, pad=0.02` ColorBar 尺寸
+- Z 轴标签纵向显示（旋转 90°）
+
+### 优化
+- **布局优化**：figsize (9,7)→(10,8)，边距自适应防截断（left=0.12, bottom=0.08）
+- **代码精简**：prpd_widget.py 从 949 行减少到 ~460 行（减少 52%）
+- **移除冗余标题**：删除 "PRPS Pattern" 标题
+- **修复 ColorBar 叠加 bug**：使用 `fig.clear()` 替代 `ax.clear()` 彻底清除旧 colorbar
+
+### 依赖变化
+- 移除 pyqtgraph.opengl 运行时依赖（不再需要 OpenGL 加速模块）
+- 新增 matplotlib 运行时依赖（FigureCanvasQTAgg + Figure + projection="3d"）
+
+## [1.0.2] - 2026-06-05
 
 ### 修复
 - 首页指标卡片标题重复、数值错位
@@ -156,6 +185,6 @@
 
 ## 版本说明
 
-### 当前版本: **v2.1.0**
-### 技术栈: Python 3.10+ | PySide6 6.6+ | SQLAlchemy 2.0+ | structlog
+### 当前版本: **v1.0.3**
+### 技术栈: Python 3.10+ | PySide6 6.6+ | SQLAlchemy 2.0+ | Matplotlib | PyQtGraph
 ### 系统要求: Windows 10/11 | Python 3.10+ | 4GB RAM | 100MB 磁盘
