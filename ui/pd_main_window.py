@@ -43,6 +43,7 @@ class PDMainWindow(QMainWindow):
         super().__init__()
 
         self._db_manager = db_manager
+        self._version = "1.0.3"
         self._pages: dict[str, QWidget] = {}
         self._controller = None
 

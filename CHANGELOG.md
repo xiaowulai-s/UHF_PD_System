@@ -1,6 +1,6 @@
 # 更新日志 (CHANGELOG)
 
-## [1.0.3] - 2026-06-08
+## [1.0.3] - 2026-06-09
 
 ### 重大变更
 
@@ -18,6 +18,17 @@
 - `s=25` 散点大小，`cmap="jet"` 颜色映射
 - `shrink=0.88, pad=0.02` ColorBar 尺寸
 - Z 轴标签纵向显示（旋转 90°）
+
+### Bug 修复
+
+#### 热力图/密度图 axes 颠倒导致团簇方向异常
+- **根因**：`pg.ImageItem` 默认 `axisOrder='col-major'`，数组 `img[amp_idx][phase_idx]` 被解释为 `img[X][Y]`，使幅值映射到 X 轴、相位到 Y 轴，团簇横向展开
+- **修复**：`ImageItem(axisOrder='row-major')`，使 `img[row=幅值][col=相位]` → `(Y, X)`，团簇恢复沿 Y 轴（幅值方向）纵向展开
+
+#### 3D 散点图：Windows 驱动兼容问题
+- **根因**：部分 Windows OpenGL 驱动不兼容 `GL_POINTS` 渲染（pyqtgraph.opengl）
+- **修复**：替换 `pyqtgraph.opengl` 实现为 Matplotlib 3D（`FigureCanvasQTAgg` + `Axes3D`），消除 OpenGL 驱动依赖
+- **影响**：不再需要 PyOpenGL，降低部署门槛
 
 ### 优化
 - **布局优化**：figsize (9,7)→(10,8)，边距自适应防截断（left=0.12, bottom=0.08）

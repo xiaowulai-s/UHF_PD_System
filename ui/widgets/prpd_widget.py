@@ -14,14 +14,13 @@ PRPD 图谱控件 - PRPDWidget
 
 from __future__ import annotations
 
-import math
+import logging
 from enum import Enum
 from typing import List, Optional
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import Signal
-from PySide6.QtGui import QPen, QTransform
+from PySide6.QtCore import QRectF, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -37,6 +36,8 @@ from ui.design_tokens import DT
 
 pg.setConfigOptions(antialias=True, foreground="#333333")
 
+logger = logging.getLogger(__name__)
+
 # Matplotlib 3D 支持
 try:
     from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -46,14 +47,49 @@ try:
 except ImportError:
     HAS_MPL3D = False
 
+# 将 Matplotlib 的 jet 颜色映射注册到 PyQtGraph（PyQtGraph 无内置 jet）
+# 注意：pg.colormap.get() 只从文件系统查找，内存注册的 ColorMap 无法通过 get() 获取，
+# 因此将 jet 映射存储为模块级常量 _JET_CMAP 供 update_heatmap() 直接使用
+_JET_CMAP = None  # type: ignore[assignment]
+if HAS_MPL3D:
+    try:
+        import matplotlib
+        from matplotlib import cm
+
+        # 兼容 matplotlib 3.7+ API 变更
+        try:
+            _jet_cmap = cm.get_cmap("jet")
+        except (AttributeError, DeprecationWarning):
+            _jet_cmap = matplotlib.colormaps.get_cmap("jet")
+        _jet_data = _jet_cmap(np.linspace(0, 1, 256))
+        _jet_rgba = (_jet_data[:, :4] * 255).astype(np.uint8)
+        _JET_CMAP = pg.colormap.ColorMap(
+            pos=np.linspace(0.0, 1.0, 256),
+            color=_jet_rgba,
+        )
+        logger.info("PyQtGraph jet 颜色映射创建成功")
+    except Exception as e:
+        logger.warning("jet 颜色映射创建失败，将 fallback 到 turbo: %s", e)
+
 
 class PRPDDisplayMode(Enum):
     """PRPD 显示模式"""
 
-    SCATTER = "散点图"
-    HEATMAP = "热力图"
-    DENSITY = "密度图"
-    SCATTER_3D = "3D散点图"
+    SCATTER = "scatter"
+    HEATMAP = "heatmap"
+    DENSITY = "density"
+    SCATTER_3D = "scatter_3d"
+
+    @property
+    def display_name(self) -> str:
+        """UI 显示名称"""
+        _names = {
+            "scatter": "散点图",
+            "heatmap": "热力图",
+            "density": "密度图",
+            "scatter_3d": "3D散点图",
+        }
+        return _names.get(self.value, self.value)
 
 
 class PRPDWidget(QWidget):
@@ -61,7 +97,9 @@ class PRPDWidget(QWidget):
 
     mode_changed = Signal(str)
 
-    COLORMAP = "viridis"
+    # 统一颜色映射：2D/3D 均使用 jet，保持视觉一致性
+    COLORMAP_2D = "jet"
+    COLORMAP_3D = "jet"
 
     def __init__(self, title: str = "PRPD 图谱", parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -73,15 +111,22 @@ class PRPDWidget(QWidget):
 
         self._scatter_phases: List[float] = []
         self._scatter_amplitudes: List[float] = []
+        self._scatter_cycles: List[int] = []  # 真实工频周期号（0=未知）
         self._heatmap_data: Optional[np.ndarray] = None
         self._heatmap_log: Optional[np.ndarray] = None
-        self._display_mode = "heatmap"
+        self._display_mode: str = "heatmap"  # 与 PRPDDisplayMode.value 一致
 
         # 3D 视图状态（Matplotlib）
         self._mpl_canvas = None  # FigureCanvasQTAgg
         self._mpl_fig = None  # Figure
         self._mpl_ax = None  # Axes3D
-        self._view_stack = None
+        self._mpl_colorbar = None  # ColorBar（持久化引用）
+        self._mpl_scatter = None  # Scatter 对象（增量更新用）
+        self._3d_elev = 36  # 当前3D视角
+        self._3d_azim = -122
+        self._3d_initialized = False  # 3D 首次绘制标记
+        self._3d_data_dirty = False  # 3D 数据脏标记（非3D模式下数据变更时设为True）
+        self._3d_render_timer = None  # 3D 渲染节流定时器
 
         self._setup_ui()
 
@@ -99,7 +144,7 @@ class PRPDWidget(QWidget):
 
         header.addStretch()
 
-        self._info_label = QLabel("0 \u4E8B\u4EF6")
+        self._info_label = QLabel("0 事件")
         self._info_label.setStyleSheet(f"color: {DT.C.TEXT_TERTIARY}; font-size: 11px;")
         header.addWidget(self._info_label)
 
@@ -109,8 +154,11 @@ class PRPDWidget(QWidget):
         for mode in PRPDDisplayMode:
             if mode == PRPDDisplayMode.SCATTER_3D and not HAS_MPL3D:
                 continue
-            self._mode_combo.addItem(mode.value, mode.name.lower())
-        self._mode_combo.setCurrentIndex(1)
+            self._mode_combo.addItem(mode.display_name, mode.value)
+        # 设置默认选中热力图
+        heatmap_idx = self._mode_combo.findData(PRPDDisplayMode.HEATMAP.value)
+        if heatmap_idx >= 0:
+            self._mode_combo.setCurrentIndex(heatmap_idx)
         self._mode_combo.blockSignals(False)
         self._mode_combo.setFixedHeight(26)
         self._mode_combo.setStyleSheet(
@@ -137,7 +185,7 @@ class PRPDWidget(QWidget):
         self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         header.addWidget(self._mode_combo)
 
-        btn_reset = QPushButton("\u91CD\u7F6E")
+        btn_reset = QPushButton("重置")
         btn_reset.setFixedHeight(26)
         btn_reset.setStyleSheet(self._button_style())
         btn_reset.clicked.connect(self._on_reset)
@@ -149,8 +197,8 @@ class PRPDWidget(QWidget):
         self._plot_widget = pg.PlotWidget()
         self._plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._plot_widget.setMinimumHeight(150)
-        self._plot_widget.setLabel("left", "\u5E45\u503C", units="mV")
-        self._plot_widget.setLabel("bottom", "\u76F8\u4F4D", units="\u00B0")
+        self._plot_widget.setLabel("left", "幅值", units="mV")
+        self._plot_widget.setLabel("bottom", "相位", units="°")
         self._plot_widget.setXRange(0, 360)
         self._plot_widget.showGrid(x=True, y=True, alpha=0.2)
 
@@ -165,14 +213,12 @@ class PRPDWidget(QWidget):
         self._image_item = pg.ImageItem()
         self._image_item.setVisible(False)
         self._plot_widget.addItem(self._image_item)
-        self._image_transform = None
 
         # 用 QStackedWidget 切换 2D/3D 视图
         self._view_stack = QStackedWidget()
         self._view_stack.addWidget(self._plot_widget)  # index 0 = 2D (PyQtGraph)
-        if HAS_MPL3D:
-            mpl_w = self._build_mpl_3d_widget()
-            self._view_stack.addWidget(mpl_w)  # index 1 = 3D (Matplotlib)
+        # 3D 视图懒加载：首次切换到 scatter_3d 时才创建 Matplotlib Canvas
+        self._3d_widget_created = False
         self._view_stack.setCurrentIndex(0)
         layout.addWidget(self._view_stack)
 
@@ -183,45 +229,93 @@ class PRPDWidget(QWidget):
         self._phase_bins = phase_bins
         self._amplitude_bins = amplitude_bins
 
-        img_data = matrix.T.copy()
+        # ── 从散点事件数据构建2D直方图（与散点图同源）──
+        # ImageItem 坐标映射（已通过诊断验证）:
+        #   setRect(0, 0, phase_bins, max_amplitude)
+        #   pixel(row, col) → 数据坐标:
+        #     col → X轴: 0→left(0°), W-1→right(360°)
+        #     row → Y轴: 0→top(max_amplitude), H-1→bottom(0) [反转]
+        #
+        # 目标: X=相位(左→右), Y=幅值(下→上)
+        # 直方图: histogram2d(amplitude, phase) → shape=(amp_bins, phase_bins)
+        #   img[amp_bin, phase_bin]: row=幅值bin, col=相位bin ✅
+        #   flipud: 使低幅值(row大)→图像底部(Y=0), 高幅值(row小)→顶部(Y=max) ✅
+
+        if len(self._scatter_phases) > 10 and len(self._scatter_amplitudes) > 10:
+            ph = np.asarray(self._scatter_phases, dtype=np.float64)
+            am = np.asarray(self._scatter_amplitudes, dtype=np.float64)
+            img_data, _, _ = np.histogram2d(
+                am,
+                ph,
+                bins=(amplitude_bins, phase_bins),
+                range=[[0, self._max_amplitude], [0, float(phase_bins)]],
+            )
+            img_data = np.flipud(img_data)  # 修正Y轴反转
+            logger.info(
+                "热力图直方图: %d事件→shape=%s, 非零=%d",
+                len(ph),
+                img_data.shape,
+                int(np.count_nonzero(img_data)),
+            )
+        else:
+            # 无散点数据时从矩阵转置+翻转
+            img_data = np.flipud(matrix.T.copy())
+            logger.info("热力图矩阵回退: shape=%s", img_data.shape)
+
         if np.max(img_data) > 0:
             img_data = np.log1p(img_data)
+
         self._heatmap_log = img_data.copy()
 
         self._image_item.setImage(img_data, autoLevels=True)
-        tr = QTransform()
-        tr.translate(0, 0)
-        tr.scale(360 / phase_bins, self._max_amplitude / amplitude_bins)
-        self._image_item.setTransform(tr)
+        self._image_item.setRect(QRectF(0.0, 0.0, float(phase_bins), self._max_amplitude))
 
         self._image_item.setVisible(self._display_mode != "scatter")
         self._scatter_plot.setVisible(self._display_mode == "scatter")
 
-        cmap = pg.colormap.get(self.COLORMAP)
+        # 使用模块级 _JET_CMAP（从 Matplotlib jet 提取），fallback 到 turbo
+        if self.COLORMAP_2D == "jet" and _JET_CMAP is not None:
+            cmap = _JET_CMAP
+        else:
+            try:
+                cmap = pg.colormap.get(self.COLORMAP_2D)
+            except (FileNotFoundError, OSError):
+                cmap = None
+            if cmap is None:
+                cmap = pg.colormap.get("turbo")
         if cmap is not None:
             self._image_item.setColorMap(cmap)
 
         total = int(np.sum(matrix))
-        self._info_label.setText(f"{total} \u4E8B\u4EF6")
+        self._info_label.setText(f"矩阵总和 {total}")
         self._sync_3d_view()
 
-    def update_scatter(self, phases: List[float], amplitudes: List[float]) -> None:
+    def update_scatter(self, phases: List[float], amplitudes: List[float], cycles: Optional[List[int]] = None) -> None:
         self._scatter_phases = list(phases)
         self._scatter_amplitudes = list(amplitudes)
+        self._scatter_cycles = list(cycles) if cycles else [0] * len(phases)
 
         if len(phases) == 0:
             return
 
         spots = [{"pos": (p, a), "size": 4} for p, a in zip(phases, amplitudes)]
         self._scatter_plot.setData(spots)
-        self._image_item.setVisible(self._display_mode == "heatmap" or self._display_mode == "density")
+        self._image_item.setVisible(self._display_mode in ("heatmap", "density"))
         self._scatter_plot.setVisible(self._display_mode == "scatter")
-        self._info_label.setText(f"{len(phases)} \u4E8B\u4EF6")
+        self._info_label.setText(f"{len(phases)} 事件")
 
-        if self._display_mode == "scatter_3d":
-            self._update_3d_scatter()
+        # 任何模式下都更新3D缓存数据（不触发绘制），确保切换到3D时立即可用
+        self._3d_data_dirty = True
 
     # ── 3D 视图（Matplotlib）─────────────────────────
+
+    def _ensure_3d_widget(self) -> None:
+        """懒加载：首次调用时创建 Matplotlib 3D Canvas 并加入 QStackedWidget"""
+        if self._3d_widget_created or not HAS_MPL3D:
+            return
+        mpl_w = self._build_mpl_3d_widget()
+        self._view_stack.addWidget(mpl_w)  # index 1 = 3D (Matplotlib)
+        self._3d_widget_created = True
 
     def _build_mpl_3d_widget(self):
         """
@@ -255,27 +349,39 @@ class PRPDWidget(QWidget):
         self._mpl_fig = fig
         self._mpl_ax = ax
 
+        # 连接鼠标交互事件，保存用户旋转的视角
+        def _on_mouse_release(event):
+            if self._mpl_ax is not None:
+                self._3d_elev = self._mpl_ax.elev
+                self._3d_azim = self._mpl_ax.azim
+
+        canvas.mpl_connect("button_release_event", _on_mouse_release)
+
         return canvas
 
     def _update_3d_scatter(self) -> None:
         """使用 Matplotlib 绘制 3D PRPS 散点图（参数与 plot_PRPS.py 一致）"""
-        if not HAS_MPL3D or self._mpl_ax is None or self._mpl_fig is None:
+        if not HAS_MPL3D:
+            return
+        # 懒加载 3D Widget（首次调用时创建）
+        self._ensure_3d_widget()
+        if self._mpl_ax is None or self._mpl_fig is None:
             return
         try:
             self._do_update_3d_scatter_mpl()
+            self._3d_data_dirty = False
         except Exception:
-            import traceback
-
-            traceback.print_exc()
+            logger.exception("3D 散点图渲染失败")
 
     def _do_update_3d_scatter_mpl(self) -> None:
-        """Matplotlib 3D 散点图内核实现"""
+        """Matplotlib 3D 散点图内核实现 — 增量更新，不 fig.clear()"""
         ax = self._mpl_ax
         fig = self._mpl_fig
 
         # 获取数据
         phases = np.array(self._scatter_phases, dtype=np.float64)
         amps = np.array(self._scatter_amplitudes, dtype=np.float64)
+        cycles = np.array(self._scatter_cycles, dtype=np.float64)
         n = len(phases)
 
         # 数据不足时从热力图回退
@@ -284,67 +390,112 @@ class PRPDWidget(QWidget):
             h, w = self._heatmap_data.shape
             rows, cols = np.nonzero(self._heatmap_data > 0)
             if len(rows) < 10 and self._heatmap_log is not None:
-                rows, cols = np.mgrid[0:h, 0:w].reshape(2, -1)
+                # 从 log 矩阵回退：生成所有非零 bin 的中心点
+                all_rows, all_cols = np.mgrid[0:h, 0:w].reshape(2, -1)
                 vals = self._heatmap_data.ravel()
                 mask = vals > 0
-                rows, cols = rows[mask], cols[mask]
+                rows, cols = all_rows[mask], all_cols[mask]
             if len(rows) > 0:
-                phases = (cols.astype(np.float64) + 0.5) * (360 / w)
-                amps = (rows.astype(np.float64) + 0.5) * (self._max_amplitude / h)
+                # 生成 bin 中心坐标 + 微小随机扰动，避免网格对齐的视觉伪影
+                phase_jitter = np.random.uniform(-0.4, 0.4, size=len(cols)) * (360.0 / w)
+                amp_jitter = np.random.uniform(-0.4, 0.4, size=len(rows)) * (self._max_amplitude / h)
+                phases = (cols.astype(np.float64) + 0.5) * (360.0 / w) + phase_jitter
+                amps = (rows.astype(np.float64) + 0.5) * (self._max_amplitude / h) + amp_jitter
+                amps = np.clip(amps, 0, None)  # 幅值不能为负
+                cycles = np.zeros(len(phases), dtype=np.float64)  # 回退数据无周期信息
                 n = len(phases)
                 used_fallback = True
 
         if n < 10:
             return
 
-        print(
-            f"[3D-MPL] \u6E32\u67D3 {n} \u4E2A\u70B9 (fallback={used_fallback}), "
-            f"amp=[{float(amps.min()):.1f}, {float(amps.max()):.1f}]"
+        logger.debug(
+            "3D-MPL 渲染 %d 个点 (fallback=%s), amp=[%.1f, %.1f]",
+            n,
+            used_fallback,
+            float(amps.min()),
+            float(amps.max()),
         )
 
-        # ── 与 plot_PRPS.py 完全一致的数据处理 ──
+        # ── 周期编号：优先使用真实周期号，与 plot_PRPS.py 公式一致 ──
         N_CYCLES = 50
-        events_per_cycle = max(1, n // N_CYCLES)
-        cycle_nums = np.clip(np.floor(np.arange(n) / events_per_cycle), 0, N_CYCLES - 1)
-
-        raw_cycle_local = ((cycle_nums) % 50) + 1
         phase = phases
         discharge = np.abs(amps)
 
-        # 清空旧图形（包括旧 colorbar）并重新绘制
-        # fig.clear() 清除所有 axes 和 colorbar，然后重建 3D 子图
-        fig.clear()
-        ax_new = fig.add_subplot(111, projection="3d")
-        # 替换引用
-        self._mpl_ax = ax_new
-        ax = ax_new
+        if np.any(cycles > 0):
+            # 有真实周期号：与 plot_PRPS.py 公式一致
+            # cycle_local = ((raw_cycle - 1) % 50) + 1
+            raw_cycle_local = ((cycles - 1) % N_CYCLES) + 1
+        else:
+            # 无真实周期号：模拟分配（均匀切割）
+            events_per_cycle = max(1, n // N_CYCLES)
+            cycle_nums = np.clip(np.floor(np.arange(n) / events_per_cycle), 0, N_CYCLES - 1)
+            raw_cycle_local = (cycle_nums % N_CYCLES) + 1
 
-        # 绘制 3D 散点（参数与 plot_PRPS.py 一致，散点适当放大）
-        scatter = ax.scatter(
+        # ── 增量更新：只清除散点数据，保留坐标轴和ColorBar ──
+        if not self._3d_initialized:
+            # 首次绘制：完整设置
+            self._setup_3d_axes(ax, phase, raw_cycle_local, discharge)
+            self._3d_initialized = True
+        else:
+            # 后续更新：只移除旧散点，保留坐标轴框架和ColorBar
+            if self._mpl_scatter is not None:
+                try:
+                    self._mpl_scatter.remove()
+                except (ValueError, AttributeError):
+                    pass
+
+            # 重新绘制散点
+            self._mpl_scatter = ax.scatter(
+                phase,
+                raw_cycle_local,
+                discharge,
+                s=18,  # 与 plot_PRPS.py 一致
+                c=discharge,
+                cmap="jet",
+                marker="o",
+                edgecolors="none",
+            )
+
+            # 更新 ColorBar 的标量映射范围
+            if self._mpl_colorbar is not None:
+                self._mpl_colorbar.update_normal(self._mpl_scatter)
+
+            # 保留用户视角（不重置为默认）
+            ax.view_init(elev=self._3d_elev, azim=self._3d_azim)
+
+            # 更新 Z 轴范围
+            z_max_val = max(1000.0, float(np.max(discharge) * 1.05))
+            ax.set_zlim(0, z_max_val)
+
+        # 刷新画布
+        self._mpl_canvas.draw_idle()  # draw_idle 比 draw 更高效
+
+    def _setup_3d_axes(self, ax, phase: np.ndarray, cycle: np.ndarray, discharge: np.ndarray) -> None:
+        """首次绘制3D坐标轴和散点（完整初始化）"""
+        # 绘制 3D 散点（参数与 plot_PRPS.py 一致）
+        self._mpl_scatter = ax.scatter(
             phase,
-            raw_cycle_local,
+            cycle,
             discharge,
-            s=25,
+            s=18,  # 与 plot_PRPS.py 一致
             c=discharge,
             cmap="jet",
             marker="o",
             edgecolors="none",
         )
 
-        # ColorBar（放大填充）
-        cb = fig.colorbar(scatter, ax=ax, shrink=0.88, pad=0.02)
-        cb.set_label("Discharge (a.u.)")
-        cb.ax.tick_params(labelsize=9)
+        # ColorBar（shrink=0.74 与 plot_PRPS.py 一致）
+        self._mpl_colorbar = self._mpl_fig.colorbar(self._mpl_scatter, ax=ax, shrink=0.74, pad=0.03)
+        self._mpl_colorbar.set_label("放电量", fontsize=10)
+        self._mpl_colorbar.ax.tick_params(labelsize=9)
 
         # 坐标轴设置（参数与 plot_PRPS.py 一致）
-        ax.set_xlabel("\u76F8\u4F4D (\u00B0)", fontsize=10, labelpad=6)
-        ax.set_ylabel("\u5DE5\u9891\u5468\u671F (n)", fontsize=10, labelpad=8)
-        ax.set_zlabel("\u653E\u7535\u91CF", fontsize=10, labelpad=10)
+        ax.set_xlabel("相位 (°)", fontsize=10, labelpad=8)
+        ax.set_ylabel("周期 (n)", fontsize=10, labelpad=8)
+        ax.set_zlabel("放电量(mV)", fontsize=10, labelpad=10)
         ax.tick_params(axis="both", which="major", labelsize=9)
         ax.zaxis.set_tick_params(labelsize=9)
-
-        # Z 轴标签纵向显示（沿坐标轴方向）
-        ax.zaxis.label.set_rotation(90)
 
         ax.set_xlim(0, 360)
         ax.set_ylim(0, 50)
@@ -354,19 +505,13 @@ class PRPDWidget(QWidget):
         ax.set_xticks([0, 60, 120, 180, 240, 300, 360])
 
         # 视角（参数与 plot_PRPS.py 一致）
-        ax.view_init(elev=36, azim=-122)
+        ax.view_init(elev=self._3d_elev, azim=self._3d_azim)
 
         # 盒子比例（参数与 plot_PRPS.py 一致）
         ax.set_box_aspect((1.45, 1.15, 1.20))
 
-        # 不设标题
-
-        # 调整边距：四周留白确保刻度 "0" 等不被截断
-        fig.subplots_adjust(left=0.12, right=0.92, bottom=0.08, top=0.96)
-        fig.tight_layout(rect=[0.12, 0.06, 0.92, 0.96])
-
-        # 刷新画布
-        self._mpl_canvas.draw()
+        # 边距调整（仅 subplots_adjust，不调 tight_layout 避免冲突）
+        self._mpl_fig.subplots_adjust(left=0.08, right=0.92, bottom=0.08, top=0.95)
 
     def _sync_3d_view(self) -> None:
         if self._display_mode == "scatter_3d":
@@ -380,16 +525,16 @@ class PRPDWidget(QWidget):
     # ── 模式切换 ─────────────────────────────────────
 
     def _on_mode_changed(self, idx: int) -> None:
-        mode_name = self._mode_combo.itemData(idx)
-        self._display_mode = mode_name
-        self.mode_changed.emit(mode_name)
+        mode_value = self._mode_combo.itemData(idx)
+        self._display_mode = mode_value
+        self.mode_changed.emit(mode_value)
 
-        if mode_name == "scatter":
+        if mode_value == "scatter":
             self._scatter_plot.setVisible(True)
             self._image_item.setVisible(False)
             self._view_stack.setCurrentIndex(0)
-            self._plot_widget.setLabel("left", "\u5E45\u503C", units="mV")
-            self._plot_widget.setLabel("bottom", "\u76F8\u4F4D", units="\u00B0")
+            self._plot_widget.setLabel("left", "幅值", units="mV")
+            self._plot_widget.setLabel("bottom", "相位", units="°")
             if self._scatter_phases:
                 spots = [
                     {"pos": (p, a), "size": 4}
@@ -401,33 +546,38 @@ class PRPDWidget(QWidget):
                 self._plot_widget.setYRange(0, y_max)
             self._plot_widget.showGrid(x=True, y=True, alpha=0.2)
 
-        elif mode_name == "density":
+        elif mode_value == "density":
             self._scatter_plot.setVisible(False)
             self._image_item.setVisible(True)
             self._view_stack.setCurrentIndex(0)
-            self._plot_widget.setLabel("left", "\u5E45\u503C", units="mV")
-            self._plot_widget.setLabel("bottom", "\u76F8\u4F4D", units="\u00B0")
+            self._plot_widget.setLabel("left", "幅值", units="mV")
+            self._plot_widget.setLabel("bottom", "相位", units="°")
             self._plot_widget.setXRange(0, 360)
             self._plot_widget.setYRange(0, self._max_amplitude)
             self._apply_density_smooth()
             self._plot_widget.showGrid(x=True, y=True, alpha=0.2)
 
-        elif mode_name == "scatter_3d":
+        elif mode_value == "scatter_3d":
             self._scatter_plot.setVisible(False)
             self._image_item.setVisible(False)
+            # 先懒加载创建 3D Widget，再切换视图（避免 setCurrentIndex 越界）
+            self._ensure_3d_widget()
             self._view_stack.setCurrentIndex(1)
-            self._update_3d_scatter()
+            # 如果有脏数据（非3D模式下积累的数据变更），立即渲染
+            if self._3d_data_dirty or not self._3d_initialized:
+                self._update_3d_scatter()
 
-        else:
+        else:  # heatmap
             self._scatter_plot.setVisible(False)
             self._image_item.setVisible(True)
             self._view_stack.setCurrentIndex(0)
-            self._plot_widget.setLabel("left", "\u5E45\u503C", units="mV")
-            self._plot_widget.setLabel("bottom", "\u76F8\u4F4D", units="\u00B0")
+            self._plot_widget.setLabel("left", "幅值", units="mV")
+            self._plot_widget.setLabel("bottom", "相位", units="°")
             self._plot_widget.setXRange(0, 360)
             self._plot_widget.setYRange(0, self._max_amplitude)
             if self._heatmap_log is not None:
                 self._image_item.setImage(self._heatmap_log, autoLevels=True)
+                self._image_item.setRect(QRectF(0.0, 0.0, float(self._phase_bins), self._max_amplitude))
             self._plot_widget.showGrid(x=True, y=True, alpha=0.2)
 
     def _apply_density_smooth(self) -> None:
@@ -439,6 +589,7 @@ class PRPDWidget(QWidget):
             smoothed = gaussian_filter(self._heatmap_log, sigma=1.5) if self._heatmap_log is not None else None
             if smoothed is not None:
                 self._image_item.setImage(smoothed, autoLevels=True)
+                self._image_item.setRect(QRectF(0.0, 0.0, float(self._phase_bins), self._max_amplitude))
         except ImportError:
             pass
 
@@ -449,12 +600,18 @@ class PRPDWidget(QWidget):
         self._heatmap_log = None
         self._scatter_phases.clear()
         self._scatter_amplitudes.clear()
-        self._info_label.setText("0 \u4E8B\u4EF6")
+        self._scatter_cycles.clear()
+        self._info_label.setText("0 事件")
 
-        # 清除 3D 视图
+        # 清除 3D 视图并重置状态
+        self._3d_data_dirty = False
         if self._mpl_ax is not None:
             self._mpl_ax.clear()
-            self._mpl_canvas.draw()
+            self._3d_initialized = False
+            self._mpl_scatter = None
+            self._mpl_colorbar = None
+            if self._mpl_canvas is not None:
+                self._mpl_canvas.draw_idle()
 
         self._view_stack.setCurrentIndex(0)
 

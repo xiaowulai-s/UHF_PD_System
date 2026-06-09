@@ -256,9 +256,22 @@ class PDSystemController(QObject):
         # Monitor: 全功能 PRPD 控件
         if "monitor" in pages:
             try:
-                pages["monitor"]._prpd.update_heatmap(prpd_result.matrix, 360, 256)
+                prpd_widget = pages["monitor"]._prpd
+                # 同步处理器当前 max_amplitude 到控件，确保热力图 Y 轴范围与散点图一致
+                effective_max = getattr(prpd_result, "max_amplitude", None)
+                if effective_max is not None and effective_max > 0:
+                    prpd_widget.set_max_amplitude(effective_max)
+
+                # 先更新散点数据（热力图需要从中构建同源2D直方图）
+                if hasattr(prpd_result, "events") and prpd_result.events:
+                    evt_phases = [e.phase for e in prpd_result.events]
+                    evt_amps = [e.amplitude for e in prpd_result.events]
+                    evt_cycles = [getattr(e, "cycle", 0) for e in prpd_result.events]
+                    pages["monitor"]._prpd.update_scatter(evt_phases, evt_amps, evt_cycles)
+
+                prpd_widget.update_heatmap(prpd_result.matrix, 360, 256)
             except Exception:
-                pass
+                logger.exception("PRPD UI 更新失败")
 
         # Dashboard: 仅更新快照
         if "dashboard" in pages:
@@ -271,9 +284,15 @@ class PDSystemController(QObject):
         """PRPS 结果 → UI"""
         if "monitor" in self._pages:
             try:
-                self._pages["monitor"]._prpd.update_heatmap(prps_result.matrix, 360, 256)
+                # PRPS 数据应发到 PRPS 控件，而非 PRPD 控件
+                # 如果 Monitor 页面有 _prps 控件，更新它
+                if hasattr(self._pages["monitor"], "_prps") and self._pages["monitor"]._prps is not None:
+                    self._pages["monitor"]._prps.update_from_prps_processor(
+                        prps_result.matrix, prps_result.total_cycles
+                    )
+                # 如果没有独立 PRPS 控件，暂不更新（避免将512x360矩阵错误写入360x256的PRPD控件）
             except Exception:
-                pass
+                logger.exception("PRPS UI 更新失败")
 
     def _on_alarm_for_ui(self, device_id: str, alarm_dict: dict) -> None:
         """报警 → AlarmPage + Dashboard"""

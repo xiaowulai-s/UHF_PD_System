@@ -98,8 +98,14 @@ class AcquisitionService:
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.RLock()
 
-        # PRPD 帧计数（用于衰减）
-        self._prpd_frame_count: Dict[str, int] = {}
+        # PRPD 帧计数（用于衰减），按通道独立
+        self._prpd_frame_count: Dict[str, int] = {}  # PRPD 发布帧计数（每50帧发布一次）
+        self._prpd_decay_count: Dict[str, int] = {}  # PRPD 衰减帧计数（每20帧衰减一次）
+        self._observed_max_amp: Dict[str, float] = {}  # 每通道观测到的最大幅值，用于动态调整 max_amplitude
+
+        # PRPS 发布节流（每N帧发布一次）
+        self._prps_frame_count: Dict[str, int] = {}
+        self._prps_publish_interval = 10  # PRPS 每10帧发布一次
 
         # 统计
         self._stats = {
@@ -136,6 +142,9 @@ class AcquisitionService:
             self._peak_detectors.clear()
             self._sample_rates.clear()
             self._prpd_frame_count.clear()
+            self._prpd_decay_count.clear()
+            self._observed_max_amp.clear()
+            self._prps_frame_count.clear()
         logger.info("采集服务已停止")
 
     @property
@@ -162,7 +171,9 @@ class AcquisitionService:
         with self._lock:
             key = self._channel_key(device_id, channel_id)
             if key not in self._prpd_processors:
-                self._prpd_processors[key] = PRPDProcessor(phase_bins=360, amplitude_bins=256)
+                # 初始 max_amplitude 设为 10000 mV (10V)，覆盖典型 PD 信号范围(kV级)
+                # 运行中若检测到更大幅值会动态扩展并重建矩阵
+                self._prpd_processors[key] = PRPDProcessor(phase_bins=360, amplitude_bins=256, max_amplitude=10000.0)
             return self._prpd_processors[key]
 
     def get_or_create_prps(self, device_id: str, channel_id: int) -> PRPSProcessor:
@@ -265,37 +276,68 @@ class AcquisitionService:
         except Exception as e:
             logger.debug("[%s] FFT 异常: %s", device_id, e)
 
-        # PRPD 更新 + 指数衰减
+        # PRPD 更新 + 指数衰减 + 动态幅值范围
         try:
             prpd_proc = self.get_or_create_prpd(device_id, channel_id)
             prpd_proc.add_waveform(samples, phase_offset=0)
 
-            # 每 20 帧应用一次指数衰减
+            # 动态调整 max_amplitude：根据观测到的峰值幅值自适应扩展范围，
+            # 避免固定 max_amplitude 导致大幅值事件被截断到顶部 bin。
+            if pd_events:
+                frame_max_amp = max(abs(p.amplitude) for p in pd_events)
+                prev_max = self._observed_max_amp.get(key, 0.0)
+                if frame_max_amp > prev_max:
+                    self._observed_max_amp[key] = frame_max_amp
+                    # 当观测幅值超过当前处理器范围的 80% 时，扩展到 1.2 倍观测值
+                    if frame_max_amp > prpd_proc.max_amplitude * 0.8:
+                        new_max = frame_max_amp * 1.2
+                        prpd_proc.max_amplitude = new_max
+                        # 关键：扩展后必须重建矩阵，否则旧事件仍停留在被截断的bin中
+                        prpd_proc.rebuild_matrix()
+
+            # 每 20 帧应用一次指数衰减（独立计数器，不与发布计数器共享）
+            if key not in self._prpd_decay_count:
+                self._prpd_decay_count[key] = 0
+            self._prpd_decay_count[key] += 1
+            if self._prpd_decay_count[key] >= 20:
+                self._prpd_decay_count[key] = 0
+                prpd_proc.decay(self.PRPD_DECAY_FACTOR)
+
+            # 定期发布 PRPD（每 50 帧，按通道独立计数）
             if key not in self._prpd_frame_count:
                 self._prpd_frame_count[key] = 0
             self._prpd_frame_count[key] += 1
-            if self._prpd_frame_count[key] >= 20:
+            if self._prpd_frame_count[key] >= 50:
                 self._prpd_frame_count[key] = 0
-                prpd_proc._matrix *= self.PRPD_DECAY_FACTOR
-
-            # 定期发布 PRPD（每 50 帧）
-            self._stats["waveforms_processed"] += 1
-            if self._stats["waveforms_processed"] % 50 == 0:
                 prpd_result = prpd_proc.compute()
+                # 将当前有效 max_amplitude 传递给 UI 控件同步 Y 轴范围
+                effective_max = prpd_proc.max_amplitude
                 self._data_bus.publish_prpd_result(device_id, channel_id, prpd_result)
         except Exception as e:
             logger.debug("[%s] PRPD 异常: %s", device_id, e)
 
-        # PRPS 更新
+        # PRPS 更新（每N帧发布一次，避免UI过载）
         try:
             prps_proc = self.get_or_create_prps(device_id, channel_id)
             phase_binned = np.zeros(360)
             for peak in pd_events[:360]:
-                phase_idx = int((peak.position / len(samples)) * 360) % 360
+                # 相位映射：将峰值位置线性映射到 0~360°
+                # TODO: 当前假设波形覆盖恰好一个工频周期。若采样率非工频整数倍
+                #       或波形跨越多周期，应通过过零检测(zero-crossing)或外部同步信号
+                #       精确定位工频周期边界，再计算相对相位。
+                phase_deg = (peak.position / max(len(samples), 1)) * 360.0
+                phase_idx = int(phase_deg) % 360
                 phase_binned[phase_idx] = max(phase_binned[phase_idx], abs(peak.amplitude))
             prps_proc.add_cycle(phase_binned)
-            prps_result = prps_proc.compute()
-            self._data_bus.publish_prps_result(device_id, channel_id, prps_result)
+
+            # 节流：每 _prps_publish_interval 帧发布一次
+            if key not in self._prps_frame_count:
+                self._prps_frame_count[key] = 0
+            self._prps_frame_count[key] += 1
+            if self._prps_frame_count[key] >= self._prps_publish_interval:
+                self._prps_frame_count[key] = 0
+                prps_result = prps_proc.compute()
+                self._data_bus.publish_prps_result(device_id, channel_id, prps_result)
         except Exception as e:
             logger.debug("[%s] PRPS 异常: %s", device_id, e)
 
@@ -380,6 +422,7 @@ class AcquisitionService:
             self._peak_detectors.pop(key, None)
             self._sample_rates.pop(key, None)
             self._prpd_frame_count.pop(key, None)
+            self._prps_frame_count.pop(key, None)
 
     def release_device(self, device_id: str) -> None:
         prefix = f"{device_id}:"
@@ -405,3 +448,6 @@ class AcquisitionService:
             for d in list(self._prpd_frame_count.keys()):
                 if d.startswith(prefix):
                     del self._prpd_frame_count[d]
+            for d in list(self._prps_frame_count.keys()):
+                if d.startswith(prefix):
+                    del self._prps_frame_count[d]

@@ -50,6 +50,7 @@ class PDEvent:
     polarity: int = 0  # 极性: 0=正, 1=负
     energy: float = 0.0  # 能量 (pC)
     timestamp: float = 0.0  # 时间戳
+    cycle: int = 0  # 工频周期编号（从1开始，0表示未知）
 
 
 class PRPDProcessor:
@@ -82,6 +83,7 @@ class PRPDProcessor:
         self._matrix = np.zeros((phase_bins, amplitude_bins), dtype=np.float64)
         self._max_events = 100000  # 最大缓存事件数
         self._events: deque = deque(maxlen=self._max_events)
+        self._cycle_count = 0  # 工频周期计数器
 
     # ── 属性 ─────────────────────────────────────────
 
@@ -107,7 +109,7 @@ class PRPDProcessor:
 
     # ── 数据更新 ─────────────────────────────────────
 
-    def add_event(self, phase: float, amplitude: float, polarity: int = 0, energy: float = 0.0) -> None:
+    def add_event(self, phase: float, amplitude: float, polarity: int = 0, energy: float = 0.0, cycle: int = 0) -> None:
         """
         添加单个局放事件
 
@@ -116,21 +118,20 @@ class PRPDProcessor:
             amplitude: 幅值 (mV)
             polarity: 极性 (0=正, 1=负)
             energy: 放电能量 (pC)
+            cycle: 工频周期编号（0=未知/使用当前内部计数）
         """
+        actual_cycle = cycle if cycle > 0 else self._cycle_count
         event = PDEvent(
             phase=phase % 360,
             amplitude=amplitude,
             polarity=polarity,
             energy=energy,
+            cycle=actual_cycle,
         )
-        # deque maxlen 自动淘汰旧事件
-        if len(self._events) == self._max_events:
-            removed = self._events[0]
-            p_idx_r = self._phase_to_index(removed.phase)
-            a_idx_r = self._amplitude_to_index(removed.amplitude)
-            if 0 <= p_idx_r < self._phase_bins and 0 <= a_idx_r < self._amplitude_bins:
-                self._matrix[p_idx_r, a_idx_r] = max(0, self._matrix[p_idx_r, a_idx_r] - 1.0)
 
+        # deque maxlen 自动淘汰旧事件
+        # 注意：不再从矩阵中减1，因为多线程/衰减场景下会产生负值误差
+        # 矩阵的"过期"通过 decay() 方法的指数衰减统一处理
         self._events.append(event)
 
         # 更新矩阵
@@ -155,12 +156,15 @@ class PRPDProcessor:
         从波形数据中提取 PRPD 事件
 
         通过对波形进行峰值检测，提取超过阈值的峰值点作为局放事件。
+        每次调用视为一个工频周期。
 
         Args:
             waveform: 波形数据
             phase_offset: 相位偏移 (度)
         """
         from .peak_detector import PeakDetector
+
+        self._cycle_count += 1
 
         detector = PeakDetector()
         peaks = detector.detect_peaks_simple(waveform)
@@ -169,7 +173,12 @@ class PRPDProcessor:
         n = len(waveform)
         for peak in peaks:
             phase = (peak.position / n * 360 + phase_offset) % 360
-            self.add_event(phase, peak.amplitude, polarity=1 if peak.amplitude > 0 else 0)
+            self.add_event(
+                phase,
+                peak.amplitude,
+                polarity=1 if peak.amplitude > 0 else 0,
+                cycle=self._cycle_count,
+            )
 
     # ── 分析 ─────────────────────────────────────────
 
@@ -245,6 +254,32 @@ class PRPDProcessor:
         """重置所有数据"""
         self._matrix.fill(0)
         self._events.clear()
+        self._cycle_count = 0
+
+    def decay(self, factor: float = 0.995) -> None:
+        """
+        指数衰减矩阵，模拟旧数据权重降低
+
+        Args:
+            factor: 衰减系数 (0~1)，0.995 表示每次衰减 0.5%
+        """
+        self._matrix *= factor
+        # 钳制负浮点误差
+        np.clip(self._matrix, 0, None, out=self._matrix)
+
+    def rebuild_matrix(self) -> None:
+        """
+        用当前 _max_amplitude 从事件缓存重新构建矩阵。
+
+        当 max_amplitude 被动态扩展后调用此方法，
+        避免旧数据因分箱截断而集中在顶部行。
+        """
+        self._matrix.fill(0)
+        for event in self._events:
+            p_idx = self._phase_to_index(event.phase)
+            a_idx = self._amplitude_to_index(event.amplitude)
+            if 0 <= p_idx < self._phase_bins and 0 <= a_idx < self._amplitude_bins:
+                self._matrix[p_idx, a_idx] += 1.0
 
     # ── 内部辅助 ────────────────────────────────────
 

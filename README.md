@@ -157,7 +157,7 @@ python main.py
 
 基于 **PySide6 + PyQtGraph + NumPy** 的工业级超高频局部放电在线监测上位机软件。
 
-> **v1.0.3** — PRPS 3D 散点图重构（Matplotlib 替代 OpenGL，完整坐标轴系统）
+> **v1.0.3** — 热力图 axes 修复（团簇方向与散点图一致）、3D 散点图 Matplotlib 重构（取代 OpenGL）、ColorBar 叠加修复
 
 ## 核心特性
 
@@ -371,13 +371,15 @@ pytest tests/test_pd_integration.py -v
 
 ## PD 系统
 
-### v1.0.3 (2026-06-08)
+### v1.0.3 (2026-06-09)
+- **热力图/密度图 axes 修复**：`ImageItem(axisOrder='row-major')` 解决团簇横向展开问题，与散点图方向一致
 - **PRPS 3D 散点图重构**：移除 pyqtgraph.opengl 实现（~500 行），替换为 Matplotlib 3D
 - **完整坐标轴系统**：X(相位°)/Y(工频周期n)/Z(放电量) 三轴标签+刻度+网格
 - **ColorBar 集成**：Matplotlib 原生 colorbar（Jet 色图，Discharge a.u.）
 - **视觉比例优化**：`box_aspect=(1.45, 1.15, 1.20)`，视角 `elev=36°, azim=-122°`
 - **布局优化**：散点放大(s=25)、色条填充(shrink=0.88)、边距自适应防截断
 - **Z 轴标签纵向显示**：沿坐标轴方向旋转 90°
+- **ColorBar 叠加 bug 修复**：`fig.clear()` 替代 `ax.clear()`
 - 移除冗余标题 "PRPS Pattern"
 - 代码量精简：949 行 → 456 行（减少 52%）
 
@@ -413,4 +415,4 @@ MIT License
 
 ---
 
-**MCGS 系统**: v2.1.0 | **PD 系统**: v1.0.3 | **更新**: 2026-06-08
+**MCGS 系统**: v2.1.0 | **PD 系统**: v1.0.3 | **更新**: 2026-06-09

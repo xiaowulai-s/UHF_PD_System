@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui.design_tokens import DT
-from ui.widgets import FFTWidget, PRPDWidget, WaveformWidget
+from ui.widgets import FFTWidget, PRPDWidget, PRPSWidget, WaveformWidget
 
 
 class RealtimeMonitorPage(QWidget):
@@ -94,6 +94,11 @@ class RealtimeMonitorPage(QWidget):
         fl.setContentsMargins(DT.S.MD, DT.S.SM, DT.S.MD, DT.S.SM)
         self._prpd = PRPDWidget(title="PRPD 图谱 (10 FPS)")
         fl.addWidget(self._prpd)
+
+        # PRPS 控件：与 PRPD 同卡片，纵向排列
+        self._prps = PRPSWidget(title="PRPS 序列 (10 FPS)", rows=512, cols=360)
+        fl.addWidget(self._prps)
+
         parent.addWidget(frame, 1)
 
     # ── FFT 面板（无内嵌峰值列表）────────────────────
@@ -215,3 +220,7 @@ class RealtimeMonitorPage(QWidget):
     @property
     def fft(self) -> FFTWidget:
         return self._fft
+
+    @property
+    def prps(self) -> PRPSWidget:
+        return self._prps

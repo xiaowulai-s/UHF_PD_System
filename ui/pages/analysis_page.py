@@ -283,7 +283,9 @@ class DischargeClassifier:
         amp_median = float(np.median(amplitudes))
         p5 = float(np.percentile(amplitudes, 5))
         # 动态阈值: max(中位数*2, P5, 固定最小值避免过杀)
-        noise_threshold = max(amp_median * 2.0, p5 * 1.5, 0.0)
+        # 最小阈值保证: 当数据全为0或极低时，至少保留一个非零门槛
+        min_noise_threshold = max(1.0, float(np.min(amplitudes[amplitudes > 0])) if np.any(amplitudes > 0) else 1.0)
+        noise_threshold = max(amp_median * 2.0, p5 * 1.5, min_noise_threshold)
         clean_mask = amplitudes >= noise_threshold
         p_clean = phases[clean_mask]
         a_clean = amplitudes[clean_mask]
@@ -851,7 +853,6 @@ class AnalysisPage(QWidget):
         card.setStyleSheet(f"QFrame {{ background: {DT.C.BG_SECONDARY}; border-radius: {DT.R.MD}px; }}")
         cl = QHBoxLayout(card)
         cl.setContentsMargins(DT.S.MD, DT.S.SM, DT.S.MD, DT.S.SM)
-        QLabel(title, styleSheet=f"color: {DT.C.TEXT_TERTIARY}; font-size: 11px;").setParent(card)
         cl.addWidget(QLabel(title, styleSheet=f"color: {DT.C.TEXT_TERTIARY}; font-size: 11px;"))
         cl.addWidget(QLabel(value, styleSheet=f"color: {DT.C.TEXT_PRIMARY}; font-size: 14px; font-weight: 600;"))
         return card
@@ -995,9 +996,12 @@ class AnalysisPage(QWidget):
             for p, a in zip(phases, amps):
                 prpd.add_event(phase=float(p), amplitude=float(a))
             prpd_result = prpd.compute(mode=PRPDMode.HEATMAP)
-            self._prpd.update_heatmap(prpd_result.matrix, 360, 256)
-            # 同步更新散点数据，支持模式切换
+            # 同步控件 max_amplitude，确保热力图 Transform Y 轴范围与散点图一致
+            effective_max = stats.get("max_amplitude", 0) * 1.1
+            if effective_max > 0:
+                self._prpd.set_max_amplitude(effective_max)
             self._prpd.update_scatter(phases.tolist(), amps.tolist())
+            self._prpd.update_heatmap(prpd_result.matrix, 360, 256)
 
         # 更新分析结果面板
         self._update_result_display(dc, stats)
@@ -1096,8 +1100,6 @@ class AnalysisPage(QWidget):
                 if HAS_PYQTGRAPH and self._prpd is not None:
                     try:
                         import io
-
-                        from PIL import ImageGrab
 
                         # 保存 PRPD 控件截图
                         pixmap = self._prpd.grab()

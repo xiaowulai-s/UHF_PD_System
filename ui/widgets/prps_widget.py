@@ -37,6 +37,7 @@ class PRPSWidget(QWidget):
         self._rows = rows
         self._cols = cols
         self._max_amplitude = 100.0
+        self._cycle_count = 0  # 追踪已追加的周期数，用于首次 autoLevels 判断
 
         self._setup_ui()
 
@@ -109,6 +110,7 @@ class PRPSWidget(QWidget):
             # 适配不同尺寸
             self._rows, self._cols = matrix.shape
 
+        # 仅首次或矩阵结构变化时自动色阶
         self._image_item.setImage(matrix, autoLevels=True)
         self._plot_widget.setYRange(0, self._rows)
 
@@ -134,7 +136,11 @@ class PRPSWidget(QWidget):
             current[1:] = current[:-1]
         current[0] = cycle_data
 
-        self._image_item.setImage(current, autoLevels=True)
+        # 仅首次自动色阶，后续使用固定色阶避免重算
+        self._image_item.setImage(current, autoLevels=(self._cycle_count < 5))
+
+        if self._cycle_count < 5:
+            self._cycle_count += 1
 
     def update_from_prps_processor(self, matrix: np.ndarray, total_cycles: int) -> None:
         """从 PRPSProcessor 更新数据"""
@@ -153,6 +159,7 @@ class PRPSWidget(QWidget):
         """清空图谱"""
         empty = np.zeros((self._rows, self._cols))
         self._image_item.setImage(empty, autoLevels=True)
+        self._cycle_count = 0
         self._info_label.setText("0 周期")
 
     @property
