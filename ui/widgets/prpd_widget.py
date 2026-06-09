@@ -230,16 +230,11 @@ class PRPDWidget(QWidget):
         self._amplitude_bins = amplitude_bins
 
         # ── 从散点事件数据构建2D直方图（与散点图同源）──
-        # ImageItem 坐标映射（已通过诊断验证）:
-        #   setRect(0, 0, phase_bins, max_amplitude)
-        #   pixel(row, col) → 数据坐标:
-        #     col → X轴: 0→left(0°), W-1→right(360°)
-        #     row → Y轴: 0→top(max_amplitude), H-1→bottom(0) [反转]
-        #
-        # 目标: X=相位(左→右), Y=幅值(下→上)
-        # 直方图: histogram2d(amplitude, phase) → shape=(amp_bins, phase_bins)
-        #   img[amp_bin, phase_bin]: row=幅值bin, col=相位bin ✅
-        #   flipud: 使低幅值(row大)→图像底部(Y=0), 高幅值(row小)→顶部(Y=max) ✅
+        # axisOrder='row-major' + setRect(0,0,phase_bins,max_amplitude):
+        #   img_data[amp_idx, phase_idx] → pixel(row, col) → (X=phase, Y=amp)
+        #   H[0, :] = 低幅值 → row=0 → Y=0(底部) → 低幅值在底部 ✅
+        #   H[255, :] = 高幅值 → row=255 → Y=max_amp(顶部) → 高幅值在顶部 ✅
+        # 无需 flipud（flipud 是 axisOrder='col-major' 时期的残留补偿）
 
         if len(self._scatter_phases) > 10 and len(self._scatter_amplitudes) > 10:
             ph = np.asarray(self._scatter_phases, dtype=np.float64)
@@ -250,7 +245,6 @@ class PRPDWidget(QWidget):
                 bins=(amplitude_bins, phase_bins),
                 range=[[0, self._max_amplitude], [0, float(phase_bins)]],
             )
-            img_data = np.flipud(img_data)  # 修正Y轴反转
             logger.info(
                 "热力图直方图: %d事件→shape=%s, 非零=%d",
                 len(ph),
@@ -258,8 +252,7 @@ class PRPDWidget(QWidget):
                 int(np.count_nonzero(img_data)),
             )
         else:
-            # 无散点数据时从矩阵转置+翻转
-            img_data = np.flipud(matrix.T.copy())
+            img_data = matrix.T.copy()
             logger.info("热力图矩阵回退: shape=%s", img_data.shape)
 
         if np.max(img_data) > 0:
