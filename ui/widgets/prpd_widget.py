@@ -210,7 +210,7 @@ class PRPDWidget(QWidget):
         self._plot_widget.addItem(self._scatter_plot)
         self._scatter_plot.setVisible(False)
 
-        self._image_item = pg.ImageItem()
+        self._image_item = pg.ImageItem(axisOrder='row-major')
         self._image_item.setVisible(False)
         self._plot_widget.addItem(self._image_item)
 

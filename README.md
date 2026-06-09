@@ -157,7 +157,7 @@ python main.py
 
 基于 **PySide6 + PyQtGraph + NumPy** 的工业级超高频局部放电在线监测上位机软件。
 
-> **v1.0.3** — 热力图 axes 修复（团簇方向与散点图一致）、3D 散点图 Matplotlib 重构（取代 OpenGL）、ColorBar 叠加修复
+> **v1.0.3** — 热力图/密度图团簇方向修复（手动直方图+flipud修正ImageItem Y轴反转）、Jet颜色映射注册、_version崩溃修复、动态幅值范围扩展、分析页面数据同步修复
 
 ## 核心特性
 
