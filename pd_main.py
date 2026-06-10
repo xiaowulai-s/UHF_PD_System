@@ -90,6 +90,7 @@ def main() -> int:
         logger.debug("OpenGL 加速不可用（可选依赖），使用 CPU 渲染")
 
     from PySide6.QtCore import QSettings, Qt
+    from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
 
     if hasattr(Qt, "AA_EnableHighDpiScaling"):
@@ -100,6 +101,7 @@ def main() -> int:
     app.setApplicationName("超高频局部放电在线监测系统")
     app.setApplicationVersion(PD_VERSION)
     app.setOrganizationName("UHF-PD-Monitor")
+    app.setWindowIcon(QIcon("assets/icons/ems.png"))
 
     # 应用主题
     from ui.theme_manager import ThemeManager

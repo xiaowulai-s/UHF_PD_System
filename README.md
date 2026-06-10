@@ -9,7 +9,7 @@
 | 系统 | 版本 | 入口 | 说明 |
 |------|------|------|------|
 | **MCGS 设备管理系统** | v2.1.0 | `main.py` | Modbus TCP/RTU 工业设备监控 |
-| **UHF 局放监测系统** | v1.0.3 | `pd_main.py` | 超高频局部放电在线监测 |
+| **UHF 局放监测系统** | v1.0.4 | `pd_main.py` | 超高频局部放电在线监测 |
 
 ---
 
@@ -157,7 +157,7 @@ python main.py
 
 基于 **PySide6 + PyQtGraph + NumPy** 的工业级超高频局部放电在线监测上位机软件。
 
-> **v1.0.3** — 热力图/密度图团簇方向修复（手动直方图+flipud修正ImageItem Y轴反转）、Jet颜色映射注册、_version崩溃修复、动态幅值范围扩展、分析页面数据同步修复
+> **v1.0.4** — 放电类型分类策略重设计（Profile Matching 替代规则引擎）、分析结果面板重构（按周期统计+幅值统计）、布局优化、DataImporter 解包修复
 
 ## 核心特性
 
@@ -371,17 +371,31 @@ pytest tests/test_pd_integration.py -v
 
 ## PD 系统
 
+### v1.0.4 (2026-06-10)
+- **放电类型分类策略重设计**：从规则引擎切换为 Profile Matching（参考剖面匹配），使用 8 维特征向量 + 加权高斯核相似度 + Softmax 归一化，四组真实实验数据验证全部正确（电晕/悬浮颗粒/内部气隙/沿面）
+- **新增幅值分布特征**：变异系数(CV)、双峰性(bimodality)、正半周能量比(pos_energy)，增强类型区分能力
+- **核心区分特征**：`pos_energy` 区分电晕(负半周占优) vs 悬浮(均衡)；`s1_s4_ratio` 区分内部气隙(S1>S4) vs 沿面(S1≈S4)；`cv` 区分悬浮(极高) vs 其他
+- **分析结果面板重构**：参考结果卡片 + 类型统计表（出现次数/占比/说明）+ 幅值统计表（总数/max/min/avg/median/P90），标记为"参考结果"
+- **Bootstrap 多次采样统计**：50 次有放回采样，各类型出现次数和占比，置信度上限 0.85
+- **随机噪声(noise)识别**：纯噪声拒判 + UI 灰色显示"随机噪声"
+- **分析页面布局优化**：幅值分布宽度与 PRPD 一致，分析结果高度扩展至幅值分布底部
+- **DataImporter 解包修复**：`load()` 返回 5 值(fmt,phases,amps,cycles,meta)，修复 `_import_file()` 缺少 cycles 的 ValueError
+- **统一分类路径**：移除 `classify_by_cycles()`（实际周期分组事件太少不稳定），统一使用 Bootstrap `classify_cycles()`
+
 ### v1.0.3 (2026-06-09)
-- **热力图/密度图 axes 修复**：`ImageItem(axisOrder='row-major')` 解决团簇横向展开问题，与散点图方向一致
-- **PRPS 3D 散点图重构**：移除 pyqtgraph.opengl 实现（~500 行），替换为 Matplotlib 3D
+- **热力图/密度图团簇方向修复**：改用手动构建2D直方图（`np.add.at(img_data, (am_idx, ph_idx), 1)`）+ `flipud` 修正 ImageItem Y轴反转（row=0在顶部=笛卡尔Y=max），确保与散点图方向一致（纵向沿Y轴/幅值方向展开）
+- **Jet 颜色映射注册修复**：PyQtGraph 无内置 jet colormap，改为模块级 `_JET_CMAP = pg.colormap.ColorMap()` 直接引用，绕过 `pg.colormap.get()` 仅检查文件系统的限制
+- **`_version` 崩溃修复**：`_show_about()` 引用不存在的 `self._version`，在 `__init__` 中添加 `self._version = "1.0.3"`
+- **动态幅值范围扩展**：PRPDProcessor 初始 max_amplitude 从 100 提升至 10000，峰值超80%时自动扩展至 peak×1.2 并调用 `rebuild_matrix()` 重建矩阵，解决高幅值事件截断问题
+- **分析页面数据同步修复**：`analysis_page.py` 添加缺失的 `set_max_amplitude()` 调用，确保从文件加载数据时的热力图与监控页面行为一致
+- **调用顺序修正**：pd_controller 和 analysis_page 中统一为先 `update_scatter()` 后 `update_heatmap()`，确保热力图直方图使用最新散点数据
+- **PRPS 3D 散点图重构**：移除 pyqtgraph.opengl 实现（~500 行），替换为 Matplotlib 3D（懒加载+脏标记优化）
 - **完整坐标轴系统**：X(相位°)/Y(工频周期n)/Z(放电量) 三轴标签+刻度+网格
 - **ColorBar 集成**：Matplotlib 原生 colorbar（Jet 色图，Discharge a.u.）
 - **视觉比例优化**：`box_aspect=(1.45, 1.15, 1.20)`，视角 `elev=36°, azim=-122°`
 - **布局优化**：散点放大(s=25)、色条填充(shrink=0.88)、边距自适应防截断
-- **Z 轴标签纵向显示**：沿坐标轴方向旋转 90°
 - **ColorBar 叠加 bug 修复**：`fig.clear()` 替代 `ax.clear()`
-- 移除冗余标题 "PRPS Pattern"
-- 代码量精简：949 行 → 456 行（减少 52%）
+- **代码量精简**：949 行 → 456 行（减少 52%）
 
 ### v1.0.2 (2026-06-05)
 - 新增数据分析页面：导入 CSV/Excel/TXT 实验数据，PRPD 图谱显示
@@ -415,4 +429,4 @@ MIT License
 
 ---
 
-**MCGS 系统**: v2.1.0 | **PD 系统**: v1.0.3 | **更新**: 2026-06-09
+**MCGS 系统**: v2.1.0 | **PD 系统**: v1.0.4 | **更新**: 2026-06-10

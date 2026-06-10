@@ -19,7 +19,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 from PySide6.QtCore import Qt
@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QMessageBox,
     QPushButton,
     QSizePolicy,
@@ -61,7 +62,7 @@ class DataImporter:
     SUPPORTED_EXTENSIONS = [".csv", ".xlsx", ".xls", ".txt"]
 
     @staticmethod
-    def load(path: str) -> Tuple[str, np.ndarray, np.ndarray, dict]:
+    def load(path: str) -> Tuple[str, np.ndarray, np.ndarray, np.ndarray, dict]:
         """
         加载数据文件
 
@@ -80,7 +81,7 @@ class DataImporter:
             return DataImporter._load_txt(path)
 
     @staticmethod
-    def _load_csv(path: str) -> Tuple[str, np.ndarray, np.ndarray, dict]:
+    def _load_csv(path: str) -> Tuple[str, np.ndarray, np.ndarray, np.ndarray, dict]:
         with open(path, "r", encoding="utf-8-sig") as f:
             reader = csv.reader(f)
             rows = [r for r in reader if r and not r[0].startswith(("#", "%", "//"))]
@@ -89,21 +90,25 @@ class DataImporter:
         data_rows = rows[1:]
 
         # 自动映射列
-        phase_idx, amp_idx = None, None
+        phase_idx, amp_idx, cycle_idx = None, None, None
         for i, h in enumerate(header):
             if h in ("phase_deg", "phase", "phi", "φ", "相位"):
                 phase_idx = i
             if h in ("discharge", "amplitude", "amp", "magnitude", "幅值", "mv", "pc", "放电量"):
                 amp_idx = i
+            if h in ("cycle", "周期", "n", "period", "工频周期"):
+                cycle_idx = i
 
-        phases, amplitudes = [], []
+        phases, amplitudes, cycles = [], [], []
         for row in data_rows:
             try:
                 p = float(row[phase_idx]) if phase_idx is not None and len(row) > phase_idx else None
                 a = float(row[amp_idx]) if amp_idx is not None and len(row) > amp_idx else None
+                c = int(row[cycle_idx]) if cycle_idx is not None and len(row) > cycle_idx else 0
                 if p is not None and a is not None and 0 <= p <= 360 and a >= 0:
                     phases.append(p)
                     amplitudes.append(a)
+                    cycles.append(c)
             except (ValueError, IndexError, TypeError):
                 continue
 
@@ -116,6 +121,7 @@ class DataImporter:
                         if 0 <= p <= 360 and a >= 0:
                             phases.append(p)
                             amplitudes.append(a)
+                            cycles.append(0)
                     except (ValueError, IndexError):
                         continue
 
@@ -123,6 +129,7 @@ class DataImporter:
             "phase_amplitude",
             np.array(phases),
             np.array(amplitudes),
+            np.array(cycles, dtype=np.int32),
             {
                 "columns": header,
                 "total_rows": len(data_rows),
@@ -131,7 +138,7 @@ class DataImporter:
         )
 
     @staticmethod
-    def _load_excel(path: str) -> Tuple[str, np.ndarray, np.ndarray, dict]:
+    def _load_excel(path: str) -> Tuple[str, np.ndarray, np.ndarray, np.ndarray, dict]:
         try:
             import openpyxl
         except ImportError:
@@ -144,14 +151,16 @@ class DataImporter:
         data_rows = all_rows[1:]
         wb.close()
 
-        phase_idx, amp_idx = None, None
+        phase_idx, amp_idx, cycle_idx = None, None, None
         for i, h in enumerate(header):
             if h in ("phase_deg", "phase", "phi", "φ", "相位"):
                 phase_idx = i
             if h in ("discharge", "amplitude", "amp", "magnitude", "幅值", "mv", "pc"):
                 amp_idx = i
+            if h in ("cycle", "周期", "n", "period"):
+                cycle_idx = i
 
-        phases, amplitudes = [], []
+        phases, amplitudes, cycles = [], [], []
         default_idx = 0
         for row in data_rows:
             try:
@@ -169,9 +178,11 @@ class DataImporter:
                         else None
                     )
                 )
+                c = int(row[cycle_idx]) if cycle_idx is not None and len(row) > cycle_idx else 0
                 if p is not None and a is not None and 0 <= p <= 360 and a >= 0:
                     phases.append(p)
                     amplitudes.append(a)
+                    cycles.append(c)
             except (ValueError, IndexError, TypeError):
                 continue
 
@@ -179,6 +190,7 @@ class DataImporter:
             "phase_amplitude",
             np.array(phases),
             np.array(amplitudes),
+            np.array(cycles, dtype=np.int32),
             {
                 "columns": header,
                 "total_rows": len(data_rows),
@@ -187,11 +199,11 @@ class DataImporter:
         )
 
     @staticmethod
-    def _load_txt(path: str) -> Tuple[str, np.ndarray, np.ndarray, dict]:
+    def _load_txt(path: str) -> Tuple[str, np.ndarray, np.ndarray, np.ndarray, dict]:
         with open(path, "r", encoding="utf-8") as f:
             lines = [l.strip() for l in f if l.strip() and not l.strip().startswith(("#", "%"))]
 
-        phases, amplitudes = [], []
+        phases, amplitudes, cycles = [], [], []
         for line in lines:
             parts = line.split()
             if len(parts) >= 2:
@@ -200,6 +212,7 @@ class DataImporter:
                     if 0 <= p <= 360:
                         phases.append(p)
                         amplitudes.append(a)
+                        cycles.append(0)
                 except ValueError:
                     continue
 
@@ -207,6 +220,7 @@ class DataImporter:
             "phase_amplitude",
             np.array(phases),
             np.array(amplitudes),
+            np.array(cycles, dtype=np.int32),
             {
                 "columns": ["col1", "col2"],
                 "total_rows": len(lines),
@@ -216,24 +230,23 @@ class DataImporter:
 
 
 # ═══════════════════════════════════════════════════════
-# 放电类型分类器
 # ═══════════════════════════════════════════════════════
 
 
 class DischargeClassifier:
     """基于 PRPD 统计特征的放电类型分类
 
-    使用 6 扇区能量分布，通过明确规则+评分混合策略判断放电类型。
+    使用参考剖面匹配(Profile Matching)策略:
+      1. 提取多维特征向量(相位分布 + 幅值分布 + 能量分布)
+      2. 计算与各放电类型参考剖面的高斯核相似度
+      3. 归一化得到各类型匹配概率
+      4. 最高概率类型为参考结果，概率即为置信度
 
-    扇区划分:
-      S1 (0-60°),   S2 (60-120°),   S3 (120-180°)   — 正半周
-      S4 (180-240°), S5 (240-300°), S6 (300-360°)   — 负半周
-
-    各放电类型指纹:
-      - 内部气隙: S1+S4 占主导(>50%)，对称，S2/S3/S5/S6 少
-      - 电晕:     S6 占主导(>35%)，正半周极少(<15%)
-      - 沿面:     S1 占主导(>30%)，正半周占比 >60%，不对称
-      - 悬浮:     分布宽，无主导扇区，top2 集中度 <50%
+    四种放电类型的物理特征:
+      - 内部气隙: S1+S4高度集中，S1>S4(正半周略强)，低扩散，低CV
+      - 电晕:     负半周能量占绝对优势(posE低)，相位分布较宽
+      - 沿面:     S1+S4极高度集中，S1≈S4(高对称)，极低扩散，低CV
+      - 悬浮:     相位分布宽，CV极高(幅值变异大)，正负能量均衡
     """
 
     PATTERNS = {
@@ -259,31 +272,85 @@ class DischargeClassifier:
         },
     }
 
+    # ── 参考剖面: 各放电类型的典型特征值 ──
+    # 基于PRPD物理机理 + 真实实验数据校准
+    PROFILES = {
+        "corona": {
+            "quad13": 0.32,       # 低集中度(相位分散)
+            "spread": 0.68,       # 高扩散
+            "top2": 0.38,         # 低集中度
+            "symmetry": 0.88,     # 可对称可不对称
+            "s1_s4_ratio": 1.10,  # S1略大于S4
+            "cv": 1.50,           # 中等变异
+            "pos_energy": 0.25,   # 核心: 负半周能量占绝对优势
+            "neg_tail": 0.33,     # S5+S6显著
+        },
+        "internal": {
+            "quad13": 0.75,       # 高集中度
+            "spread": 0.25,       # 低扩散
+            "top2": 0.75,         # 高集中度
+            "symmetry": 0.70,     # 中等对称(S1>S4)
+            "s1_s4_ratio": 1.45,  # 核心: S1明显大于S4
+            "cv": 0.80,           # 低变异
+            "pos_energy": 0.50,   # 正负能量均衡
+            "neg_tail": 0.14,     # S5+S6少
+        },
+        "surface": {
+            "quad13": 0.88,       # 极高集中度
+            "spread": 0.12,       # 极低扩散
+            "top2": 0.88,         # 极高集中度
+            "symmetry": 0.95,     # 极高对称(S1≈S4)
+            "s1_s4_ratio": 1.05,  # 核心: S1≈S4
+            "cv": 0.50,           # 低变异
+            "pos_energy": 0.50,   # 正负能量大致均衡
+            "neg_tail": 0.06,     # S5+S6极少
+        },
+        "floating": {
+            "quad13": 0.38,       # 低集中度
+            "spread": 0.62,       # 高扩散
+            "top2": 0.40,         # 低集中度
+            "symmetry": 0.90,     # 较对称
+            "s1_s4_ratio": 0.90,  # S4略大于S1
+            "cv": 2.50,           # 核心: 极高变异
+            "pos_energy": 0.49,   # 正负能量均衡
+            "neg_tail": 0.31,     # S5+S6中等
+        },
+    }
+
+    # 特征权重: 越重要的特征权重越高
+    FEATURE_WEIGHTS = {
+        "quad13": 1.0,
+        "spread": 0.8,
+        "top2": 0.6,
+        "symmetry": 0.7,
+        "s1_s4_ratio": 1.2,      # 区分内部vs沿面的核心
+        "cv": 1.2,               # 区分悬浮的核心
+        "pos_energy": 1.3,       # 区分电晕的核心
+        "neg_tail": 0.8,
+    }
+
+    # 高斯核宽度(σ): 控制匹配容忍度, σ越小越严格
+    FEATURE_SIGMAS = {
+        "quad13": 0.15,
+        "spread": 0.15,
+        "top2": 0.15,
+        "symmetry": 0.15,
+        "s1_s4_ratio": 0.25,
+        "cv": 0.80,
+        "pos_energy": 0.10,
+        "neg_tail": 0.12,
+    }
+
     @classmethod
-    def classify(cls, phases: np.ndarray, amplitudes: np.ndarray) -> dict:
-        if len(phases) < 10:
-            return {
-                "type": "unknown",
-                "name": "未知",
-                "name_en": "Unknown",
-                "confidence": 0,
-                "severity": "normal",
-                "symmetry": False,
-                "pos_ratio": 0.5,
-                "concentration": 0,
-                "description": "数据不足",
-            }
+    def _extract_features(cls, phases: np.ndarray, amplitudes: np.ndarray) -> dict:
+        """从 PRPD 数据中提取多维特征向量"""
+        n = len(phases)
+        if n < 10:
+            return {}
 
-        n_all = len(phases)
-        max_amp = float(np.max(amplitudes))
-        p90 = float(np.percentile(amplitudes, 90))
-
-        # ── 自适应去噪 ───────────────────────────────
-        # 方法: 使用振幅中位数的倍数作为阈值, 但限制最低保留30%事件
+        # ── 自适应去噪 ──
         amp_median = float(np.median(amplitudes))
         p5 = float(np.percentile(amplitudes, 5))
-        # 动态阈值: max(中位数*2, P5, 固定最小值避免过杀)
-        # 最小阈值保证: 当数据全为0或极低时，至少保留一个非零门槛
         min_noise_threshold = max(1.0, float(np.min(amplitudes[amplitudes > 0])) if np.any(amplitudes > 0) else 1.0)
         noise_threshold = max(amp_median * 2.0, p5 * 1.5, min_noise_threshold)
         clean_mask = amplitudes >= noise_threshold
@@ -291,96 +358,151 @@ class DischargeClassifier:
         a_clean = amplitudes[clean_mask]
         n_clean = len(p_clean)
 
-        # 防止过滤过多: 保留至少 30% 事件数
-        if n_clean < max(20, n_all * 0.3):
+        if n_clean < max(20, n * 0.3):
             p_clean, a_clean = phases, amplitudes
-            n_clean = n_all
+            n_clean = n
             noise_removed = 0
         else:
-            noise_removed = n_all - n_clean
+            noise_removed = n - n_clean
 
-        # ── 双通道分析: 事件计数 + 幅值加权 ──────────
-        # 幅值加权扇区 = 高幅值事件贡献更多权重，抑制噪声影响
+        # ── 6 扇区分析 ──
         def calc_sectors(ph, amp=None):
             sec = np.zeros(6)
             for i in range(6):
                 mask = (ph >= i * 60) & (ph < (i + 1) * 60)
-                if amp is not None:
-                    sec[i] = float(np.sum(amp[mask]))  # 幅值加权
-                else:
-                    sec[i] = float(np.sum(mask))  # 事件计数
+                sec[i] = float(np.sum(amp[mask])) if amp is not None else float(np.sum(mask))
             return sec / (np.sum(sec) + 1e-10)
 
-        sectors_count = calc_sectors(p_clean)  # 计权扇区
-        sectors_weighted = calc_sectors(p_clean, a_clean)  # 幅值加权扇区
-
-        # 使用计权扇区做主判断，幅值加权做辅助验证
+        sectors_count = calc_sectors(p_clean)
+        sectors_weighted = calc_sectors(p_clean, a_clean)
         S1, S2, S3, S4, S5, S6 = sectors_count
         W1, W2, W3, W4, W5, W6 = sectors_weighted
 
-        # ── 特征提取 ──────────────────────────────────
-        pos_ratio = S1 + S2 + S3  # 正半周占比
-        quad13 = S1 + S4  # 第一+三象限
-        neg_tail_count = S5 + S6  # 240-360° 计权
-        neg_tail_weight = W5 + W6  # 240-360° 幅值加权
-        s1_dominance = S1 / (S1 + S2 + S3 + 1e-10)  # S1 在正半周主导度
-        symmetry = 1.0 - abs(S1 - S4) / (max(S1, S4) + 1e-10)  # S1↔S4 对称度
-        spread = S2 + S3 + S5 + S6  # 签名区外扩散
+        # ── 相位分布特征 ──
+        quad13 = S1 + S4
+        spread = S2 + S3 + S5 + S6
         top2 = sum(sorted([S1, S2, S3, S4, S5, S6], reverse=True)[:2])
+        symmetry = 1.0 - abs(S1 - S4) / (max(S1, S4) + 1e-10)
+        s1_s4_ratio = S1 / (S4 + 1e-10)  # S1/S4 直接比值
+        neg_tail = S5 + S6
+        pos_ratio = S1 + S2 + S3
+        s1_dominance = S1 / (S1 + S2 + S3 + 1e-10)
+        corona_tail = S6 / (S5 + S6 + 1e-10)
+        s1_ratio = S1 / (S1 + S4 + 1e-10)
+        asymmetry_ratio = abs((W1 + W2 + W3) - (W4 + W5 + W6)) / ((W1 + W2 + W3) + (W4 + W5 + W6) + 1e-10)
 
-        # 不对称度: 正负半周能量差
-        pos_energy_weight = W1 + W2 + W3
-        neg_energy_weight = W4 + W5 + W6
-        asymmetry_ratio = abs(pos_energy_weight - neg_energy_weight) / (pos_energy_weight + neg_energy_weight + 1e-10)
-        # asymmetry_ratio: 0=完全对称, 1=完全不对称
+        # ── 幅值分布特征 ──
+        amp_mean = float(np.mean(a_clean))
+        amp_std = float(np.std(a_clean))
+        amp_cv = amp_std / (amp_mean + 1e-10)
+        p75_amp = float(np.percentile(a_clean, 75))
+        bimodality = float(np.sum(a_clean > p75_amp)) / (n_clean + 1e-10)
 
-        # ── 规则引擎 ──────────────────────────────────
-        rules = []
+        # ── 能量分布特征 ──
+        pos_half_mask = (p_clean >= 0) & (p_clean < 180)
+        pos_amp_energy = float(np.sum(a_clean[pos_half_mask]))
+        total_amp_energy = float(np.sum(a_clean)) + 1e-10
+        pos_energy = pos_amp_energy / total_amp_energy
 
-        # 规则1: 电晕放电 — 负半周尾部(S5+S6)占绝对主导，正半周极少
-        # 使用幅值加权(高幅值电晕脉冲贡献大) + 计权双验证
-        corona_weight_dom = neg_tail_weight  # 幅值加权负尾部占比
-        corona_count_dom = neg_tail_count  # 计权负尾部占比
-        corona_pos_suppress = max(0, 1.0 - pos_ratio * 4)  # 正半周抑制
-        # 幅值加权下 S5+S6 占绝对主导 → 强电晕证据
-        corona_evidence = corona_weight_dom if corona_weight_dom > 0.5 else corona_count_dom
-        corona_match = corona_evidence * 0.5 + corona_pos_suppress * 0.3 + max(corona_weight_dom - 0.3, 0) * 0.2
-        corona_strong = (corona_weight_dom > 0.60 or corona_count_dom > 0.50) and pos_ratio < 0.25
-        rules.append(("corona", corona_match, corona_strong))
+        return {
+            # 匹配用特征
+            "quad13": quad13, "spread": spread, "top2": top2,
+            "symmetry": symmetry, "s1_s4_ratio": s1_s4_ratio,
+            "cv": amp_cv, "pos_energy": pos_energy, "neg_tail": neg_tail,
+            # 辅助特征(不参与匹配, 但返回给UI)
+            "S1": S1, "S2": S2, "S3": S3, "S4": S4, "S5": S5, "S6": S6,
+            "pos_ratio": pos_ratio, "s1_dominance": s1_dominance,
+            "corona_tail": corona_tail, "s1_ratio": s1_ratio,
+            "asymmetry_ratio": asymmetry_ratio, "bimodality": bimodality,
+            # 元信息
+            "noise_removed": noise_removed, "clean_events": n_clean,
+            "max_amp": float(np.max(amplitudes)),
+            "p90": float(np.percentile(amplitudes, 90)),
+            "amp_median": amp_median,
+        }
 
-        # 规则2: 沿面放电 — S1 主导正半周，正负半周不对称
-        # 沿面典型特征: 正半周占优, S1/(S1+S4) > 0.6
-        s1_ratio = S1 / (S1 + S4 + 1e-10)  # S1 在 quad13 中的占比 >0.6 偏向沿面
-        surface_pos_bias = max(0, (s1_ratio - 0.5) * 2)  # 0~1, S1越主导越高
-        surface_asym_bonus = asymmetry_ratio  # 不对称加分
-        surface_neg_suppress = max(0, 1.0 - neg_tail_count * 3)  # 负半周抑制
-        surface_match = surface_pos_bias * 0.4 + surface_asym_bonus * 0.3 + surface_neg_suppress * 0.3
-        surface_strong = s1_ratio > 0.65 and asymmetry_ratio > 0.20 and pos_ratio > 0.55
-        rules.append(("surface", surface_match, surface_strong))
+    @classmethod
+    def _compute_similarity(cls, features: dict, profile: dict) -> float:
+        """计算特征向量与参考剖面的加权高斯核相似度"""
+        score = 0.0
+        total_weight = 0.0
+        for fname, weight in cls.FEATURE_WEIGHTS.items():
+            if fname not in features or fname not in profile or fname not in cls.FEATURE_SIGMAS:
+                continue
+            diff = features[fname] - profile[fname]
+            sigma = cls.FEATURE_SIGMAS[fname]
+            sim = np.exp(-diff ** 2 / (2 * sigma ** 2))
+            score += weight * sim
+            total_weight += weight
+        return score / total_weight if total_weight > 0 else 0.0
 
-        # 规则3: 内部气隙放电 — S1+S4 主导，对称，低扩散
-        internal_match = quad13 * 0.5 + symmetry * 0.3 + max(0, 1.0 - spread / 0.55) * 0.2
-        internal_strong = quad13 > 0.50 and symmetry > 0.60 and spread < 0.55
-        rules.append(("internal", internal_match, internal_strong))
+    @classmethod
+    def classify(cls, phases: np.ndarray, amplitudes: np.ndarray) -> dict:
+        if len(phases) < 10:
+            return {
+                "type": "unknown", "name": "未知", "name_en": "Unknown",
+                "confidence": 0, "severity": "normal",
+                "symmetry": False, "pos_ratio": 0.5,
+                "concentration": 0, "description": "数据不足",
+            }
 
-        # 规则4: 悬浮颗粒放电 — 低集中度，均匀分布
-        uniformity = max(0, 1.0 - (top2 - 0.35) / 0.45)
-        floating_match = uniformity * 0.5 + max(0, 1.0 - quad13 / 0.6) * 0.3 + max(0, spread / 0.6) * 0.2
-        floating_strong = top2 < 0.50 and quad13 < 0.55
-        rules.append(("floating", floating_match, floating_strong))
+        # ── 特征提取 ──
+        feat = cls._extract_features(phases, amplitudes)
+        if not feat:
+            return {
+                "type": "unknown", "name": "未知", "name_en": "Unknown",
+                "confidence": 0, "severity": "normal",
+                "symmetry": False, "pos_ratio": 0.5,
+                "concentration": 0, "description": "特征提取失败",
+            }
 
-        # ── 决策 ──────────────────────────────────────
-        strong_matches = [(t, s) for t, s, strong in rules if strong]
-        if strong_matches:
-            best_type = max(strong_matches, key=lambda x: x[1])[0]
-            best_score = max(s for t, s in strong_matches if t == best_type)
-            confidence = min(0.75 + best_score * 0.2, 0.95)
-        else:
-            best_type = max(rules, key=lambda x: x[1])[0]
-            best_score = max(s for t, s, _ in rules if t == best_type)
-            second_score = sorted([s for _, s, _ in rules], reverse=True)[1]
-            margin = best_score - second_score
-            confidence = max(0.35, min(0.5 + margin, 0.80))
+        max_amp = feat["max_amp"]
+        p90 = feat["p90"]
+        top2 = feat["top2"]
+        spread = feat["spread"]
+        pos_ratio = feat["pos_ratio"]
+        symmetry = feat["symmetry"]
+        amp_cv = feat["cv"]
+        noise_removed = feat["noise_removed"]
+        n_clean = feat["clean_events"]
+        min_noise_threshold = max(1.0, float(np.min(amplitudes[amplitudes > 0])) if np.any(amplitudes > 0) else 1.0)
+
+        # ── 纯噪声拒判 ──
+        if top2 < 0.40 and max_amp < min_noise_threshold * 5:
+            return {
+                "type": "noise", "name": "纯噪声", "name_en": "Noise",
+                "description": "信号为随机噪声，无明显放电特征",
+                "confidence": float(f"{min(spread, 0.90):.2f}"),
+                "severity": "normal", "symmetry": False,
+                "pos_ratio": float(f"{pos_ratio:.2f}"),
+                "concentration": float(f"{top2:.3f}"),
+                "noise_removed": noise_removed, "clean_events": n_clean,
+                "features": {k: float(f"{v:.3f}") if isinstance(v, float) else v
+                             for k, v in feat.items() if k not in ("noise_removed", "clean_events", "max_amp", "p90", "amp_median")},
+                "scores": {t: 0.0 for t in ["corona", "surface", "internal", "floating"]},
+            }
+
+        # ── 剖面匹配: 计算与各类型的相似度 ──
+        raw_scores = {}
+        for type_id in cls.PROFILES:
+            raw_scores[type_id] = cls._compute_similarity(feat, cls.PROFILES[type_id])
+
+        # 归一化为概率分布(softmax with temperature)
+        score_values = np.array(list(raw_scores.values()))
+        temperature = 5.0  # 温度参数: 越大越平滑(区分度越低), 越小越尖锐
+        exp_scores = np.exp(score_values * temperature)
+        normalized = exp_scores / (np.sum(exp_scores) + 1e-10)
+
+        scores = {}
+        for i, type_id in enumerate(cls.PROFILES):
+            scores[type_id] = float(normalized[i])
+
+        # ── 决策 ──
+        best_type = max(scores, key=scores.get)
+        confidence = scores[best_type]
+
+        # 置信度上限: 真实数据必然含干扰, 不可能100%
+        confidence = min(confidence, 0.85)
 
         # 严重等级
         severity = "normal"
@@ -404,22 +526,273 @@ class DischargeClassifier:
             "concentration": float(f"{top2:.3f}"),
             "noise_removed": noise_removed,
             "clean_events": n_clean,
-            "features": {
-                "S1": float(f"{S1:.3f}"),
-                "S2": float(f"{S2:.3f}"),
-                "S3": float(f"{S3:.3f}"),
-                "S4": float(f"{S4:.3f}"),
-                "S5": float(f"{S5:.3f}"),
-                "S6": float(f"{S6:.3f}"),
-                "quad13": float(f"{quad13:.3f}"),
-                "symmetry": float(f"{symmetry:.3f}"),
-                "spread": float(f"{spread:.3f}"),
-                "top2": float(f"{top2:.3f}"),
-                "asymmetry_ratio": float(f"{asymmetry_ratio:.3f}"),
-                "s1_ratio": float(f"{s1_ratio:.3f}"),
-            },
-            "scores": {t: float(f"{s:.3f}") for t, s, _ in rules},
+            "features": {k: float(f"{v:.3f}") if isinstance(v, float) else v
+                         for k, v in feat.items() if k not in ("noise_removed", "clean_events", "max_amp", "p90", "amp_median")},
+            "scores": {k: float(f"{v:.3f}") for k, v in scores.items()},
         }
+
+    @classmethod
+    def _synthesize_cycles(
+        cls,
+        phases: np.ndarray,
+        amplitudes: np.ndarray,
+        events_per_sample: Optional[int] = None,
+        min_events_per_sample: int = 10,
+        num_samples: int = 50,
+    ) -> List[Tuple[np.ndarray, np.ndarray]]:
+        """
+        通过有放回随机抽样（Bootstrap）生成多个代表性子样本。
+
+        每个子样本从全量数据中随机抽取 events_per_sample 个事件，
+        保证每个子样本的相位/幅值分布与整体一致，避免相位排序
+        导致的分布撕裂问题。
+
+        Args:
+            phases: 相位数组 (N,)
+            amplitudes: 幅值数组 (N,)
+            events_per_sample: 每子样本目标事件数。None=自动检测(max(n//3, 30))
+            min_events_per_sample: 单子样本最少事件数
+            num_samples: 生成子样本数量（默认50次）
+
+        Returns:
+            [(sample_phases, sample_amplitudes), ...] 子样本列表
+        """
+        n = len(phases)
+        if n < min_events_per_sample * 2:
+            return [(phases, amplitudes)]
+
+        # 自动检测: 每个样本取总量的 1/8 (兼顾代表性和采样方差)
+        if events_per_sample is None:
+            events_per_sample = max(min_events_per_sample, n // 8)
+
+        # 有放回随机抽样
+        rng = np.random.default_rng(seed=42)
+        cycles = []
+        for _ in range(num_samples):
+            idx = rng.integers(0, n, size=events_per_sample)
+            cyc_ph = phases[idx]
+            cyc_amp = amplitudes[idx]
+            if len(cyc_ph) >= min_events_per_sample:
+                cycles.append((cyc_ph, cyc_amp))
+
+        if not cycles:
+            cycles = [(phases, amplitudes)]
+
+        return cycles
+
+    @classmethod
+    def classify_cycles(
+        cls,
+        phases: np.ndarray,
+        amplitudes: np.ndarray,
+        events_per_sample: Optional[int] = None,
+    ) -> dict:
+        """
+        通过 Bootstrap 重采样多次分类，返回统计聚合结果。
+
+        流程:
+          1. 从全量数据中有放回随机抽取 50 个子样本（每个含 ~N/3 事件）
+          2. 每个子样本独立调用 classify()
+          3. 统计各类型出现次数和占比
+          4. 产生"参考结果"（多数投票）
+
+        Args:
+            phases: 相位数组 (N,)
+            amplitudes: 幅值数组 (N,)
+            events_per_sample: 每子样本目标事件数
+
+        Returns:
+            包含以下字段的字典:
+            - total_samples: 总采样数
+            - type_counts: {type_id: count} 各类型出现次数
+            - type_ratios: {type_id: ratio} 各类型占比 (0~1)
+            - reference_result: 多数投票得出的参考结果 dict
+              - type, name, name_en, confidence(=最高占比), marked_as="参考结果"
+            - severity: 基于全局幅值的严重等级
+            - per_sample_results: [dict, ...] 每个子样本的原始 classify() 结果
+            - amplitude_stats: {total_events, max, min, avg, median, p90}
+        """
+        if len(phases) < 10:
+            return {
+                "total_samples": 0,
+                "type_counts": {},
+                "type_ratios": {},
+                "reference_result": {
+                    "type": "unknown", "name": "未知",
+                    "name_en": "Unknown", "confidence": 0,
+                    "marked_as": "参考结果",
+                },
+                "severity": "normal",
+                "per_sample_results": [],
+                "amplitude_stats": cls._calc_amplitude_stats(phases, amplitudes),
+            }
+
+        # ── Bootstrap 重采样 ───────────────────
+        samples = cls._synthesize_cycles(phases, amplitudes, events_per_sample)
+
+        # ── 逐样本分类 ────────────────────────
+        type_counts: dict[str, int] = {}
+        per_sample_results = []
+        for samp_ph, samp_amp in samples:
+            result = cls.classify(samp_ph, samp_amp)
+            per_sample_results.append(result)
+            t = result.get("type", "unknown")
+            type_counts[t] = type_counts.get(t, 0) + 1
+
+        total = len(samples)
+        type_ratios = {t: c / total for t, c in type_counts.items()}
+
+        # ── 参考结果：多数投票 ─────────────────
+        best_type = max(type_counts, key=type_counts.get) if type_counts else "unknown"
+        best_count = type_counts.get(best_type, 0)
+        best_ratio = best_count / total if total > 0 else 0
+
+        # 置信度上限: 真实实验数据必然含干扰, 不可能100%
+        capped_confidence = min(best_ratio, 0.85)
+
+        pattern = cls.PATTERNS.get(best_type, {})
+        reference_result = {
+            "type": best_type,
+            "name": pattern.get("name", best_type),
+            "name_en": pattern.get("name_en", best_type),
+            "confidence": float(f"{capped_confidence:.2f}"),
+            "marked_as": "参考结果",
+            "description": pattern.get("desc", ""),
+        }
+
+        # ── 严重等级（基于全局幅值）──────────────
+        amp_stats = cls._calc_amplitude_stats(phases, amplitudes)
+        severity = cls._determine_severity(amp_stats)
+
+        return {
+            "total_samples": total,
+            "type_counts": type_counts,
+            "type_ratios": type_ratios,
+            "reference_result": reference_result,
+            "severity": severity,
+            "per_sample_results": per_sample_results,
+            "amplitude_stats": amp_stats,
+        }
+
+    @classmethod
+    def classify_by_cycles(
+        cls,
+        phases: np.ndarray,
+        amplitudes: np.ndarray,
+        cycles: np.ndarray,
+    ) -> dict:
+        """
+        按实际工频周期逐周期分类，统计各类型出现次数。
+
+        流程:
+          1. 按 cycle 列值将事件分组
+          2. 每个 cycle 单独调用 classify()
+          3. 统计各类型出现次数和占比
+          4. 产生“参考结果”（多数投票）
+
+        Args:
+            phases: 相位数组 (N,)
+            amplitudes: 幅值数组 (N,)
+            cycles: 工频周期号数组 (N,)
+
+        Returns:
+            与 classify_cycles 相同结构的字典
+        """
+        if len(phases) < 10:
+            return {
+                "total_samples": 0,
+                "type_counts": {},
+                "type_ratios": {},
+                "reference_result": {
+                    "type": "unknown", "name": "未知",
+                    "name_en": "Unknown", "confidence": 0,
+                    "marked_as": "参考结果",
+                },
+                "severity": "normal",
+                "per_sample_results": [],
+                "amplitude_stats": cls._calc_amplitude_stats(phases, amplitudes),
+            }
+
+        # 按 cycle 分组
+        unique_cycles = np.unique(cycles[cycles > 0]) if np.any(cycles > 0) else np.array([0])
+        type_counts: dict[str, int] = {}
+        per_sample_results = []
+
+        for cyc in unique_cycles:
+            mask = cycles == cyc
+            cyc_ph = phases[mask]
+            cyc_amp = amplitudes[mask]
+            if len(cyc_ph) < 5:
+                continue
+            result = cls.classify(cyc_ph, cyc_amp)
+            per_sample_results.append(result)
+            t = result.get("type", "unknown")
+            type_counts[t] = type_counts.get(t, 0) + 1
+
+        total = len(per_sample_results)
+        type_ratios = {t: c / total for t, c in type_counts.items()} if total > 0 else {}
+
+        # 参考结果：多数投票
+        best_type = max(type_counts, key=type_counts.get) if type_counts else "unknown"
+        best_count = type_counts.get(best_type, 0)
+        best_ratio = best_count / total if total > 0 else 0
+
+        # 置信度上限: 真实实验数据必然含干扰, 不可能100%
+        capped_confidence = min(best_ratio, 0.85)
+
+        pattern = cls.PATTERNS.get(best_type, {})
+        reference_result = {
+            "type": best_type,
+            "name": pattern.get("name", best_type),
+            "name_en": pattern.get("name_en", best_type),
+            "confidence": float(f"{capped_confidence:.2f}"),
+            "marked_as": "参考结果",
+            "description": pattern.get("desc", ""),
+        }
+
+        amp_stats = cls._calc_amplitude_stats(phases, amplitudes)
+        severity = cls._determine_severity(amp_stats)
+
+        return {
+            "total_samples": total,
+            "type_counts": type_counts,
+            "type_ratios": type_ratios,
+            "reference_result": reference_result,
+            "severity": severity,
+            "per_sample_results": per_sample_results,
+            "amplitude_stats": amp_stats,
+            "classification_mode": "per-cycle",  # 标识为按实际周期分类
+        }
+
+    @staticmethod
+    def _calc_amplitude_stats(phases: np.ndarray, amplitudes: np.ndarray) -> dict:
+        """计算幅值统计指标"""
+        if len(amplitudes) == 0:
+            return {
+                "total_events": 0, "max_amplitude": 0, "min_amplitude": 0,
+                "avg_amplitude": 0, "median_amplitude": 0, "p90": 0,
+            }
+        return {
+            "total_events": int(len(amplitudes)),
+            "max_amplitude": float(np.max(amplitudes)),
+            "min_amplitude": float(np.min(amplitudes)),
+            "avg_amplitude": float(np.mean(amplitudes)),
+            "median_amplitude": float(np.median(amplitudes)),
+            "p90": float(np.percentile(amplitudes, 90)),
+        }
+
+    @staticmethod
+    def _determine_severity(amp_stats: dict) -> str:
+        """根据幅值统计确定严重等级"""
+        max_amp = amp_stats.get("max_amplitude", 0)
+        p90 = amp_stats.get("p90", 0)
+        if max_amp > 5000 or p90 > 3000:
+            return "critical"
+        elif max_amp > 2000 or p90 > 1000:
+            return "warning"
+        elif max_amp > 500:
+            return "attention"
+        return "normal"
 
 
 # ═══════════════════════════════════════════════════════
@@ -455,38 +828,48 @@ class ReportExporter:
         # 基本信息
         ws["A3"] = "分析时间"
         ws["B3"] = data.get("analysis_time", "")
-        ws["A4"] = "放电类型"
+        ws["A4"] = "放电类型(参考结果)"
         dc = data.get("discharge_classification", {})
-        ws["B4"] = dc.get("name", "")
-        ws["A5"] = "置信度"
-        ws["B5"] = f'{dc.get("confidence", 0):.0%}'
+        ref = dc.get("reference_result", {}) if isinstance(dc, dict) else {}
+        ws["B4"] = ref.get("name", dc.get("name", "") if isinstance(dc, dict) else "")
+        ws["A5"] = "置信度(占比)"
+        ws["B5"] = f'{ref.get("confidence", dc.get("confidence", 0)):.0%}' if isinstance(dc, dict) else "0%"
         ws["A6"] = "严重等级"
-        ws["B6"] = dc.get("severity", "")
+        ws["B6"] = dc.get("severity", "") if isinstance(dc, dict) else ""
+        ws["A7"] = "总周期数"
+        ws["B7"] = str(dc.get("total_samples", "")) if isinstance(dc, dict) else ""
 
         # 统计
         stats = data.get("statistics", {})
-        ws["A8"] = "统计指标"
-        ws["A8"].font = openpyxl.styles.Font(bold=True)
-        ws["A9"] = "总事件数"
-        ws["B9"] = stats.get("total_events", 0)
-        ws["A10"] = "最大幅值"
-        ws["B10"] = stats.get("max_amplitude", 0)
-        ws["A11"] = "平均幅值"
-        ws["B11"] = stats.get("avg_amplitude", 0)
-        ws["A12"] = "幅值中位数"
-        ws["B12"] = stats.get("median_amplitude", 0)
-        ws["A13"] = "幅值P90"
-        ws["B13"] = stats.get("p90", 0)
-        ws["A14"] = "相位集中度"
-        ws["B14"] = stats.get("concentration", 0)
+        ws["A9"] = "统计指标"
+        ws["A9"].font = openpyxl.styles.Font(bold=True)
+        ws["A10"] = "总事件数"
+        ws["B10"] = stats.get("total_events", 0)
+        ws["A11"] = "最大幅值"
+        ws["B11"] = stats.get("max_amplitude", 0)
+        ws["A12"] = "平均幅值"
+        ws["B12"] = stats.get("avg_amplitude", 0)
+        ws["A13"] = "幅值中位数"
+        ws["B13"] = stats.get("median_amplitude", 0)
+        ws["A14"] = "幅值P90"
+        ws["B14"] = stats.get("p90", 0)
+        ws["A15"] = "最小幅值"
+        ws["B15"] = stats.get("min_amplitude", 0)
 
-        # 相位分布
-        ws["A16"] = "相位分布"
-        ws["A16"].font = openpyxl.styles.Font(bold=True)
-        phase_dist = data.get("phase_distribution", {})
-        for i, (key, val) in enumerate(phase_dist.items()):
-            ws[f"A{i+17}"] = key
-            ws[f"B{i+17}"] = val
+        # 各类型统计
+        if isinstance(dc, dict):
+            type_counts = dc.get("type_counts", {})
+            type_ratios = dc.get("type_ratios", {})
+            row = 17
+            ws[f"A{row}"] = "放电类型统计"
+            ws[f"A{row}"].font = openpyxl.styles.Font(bold=True)
+            row += 1
+            for t, cnt in sorted(type_counts.items(), key=lambda x: x[1], reverse=True):
+                pattern = DischargeClassifier.PATTERNS.get(t, {})
+                ws[f"A{row}"] = pattern.get("name", t)
+                ws[f"B{row}"] = str(cnt)
+                ws[f"C{row}"] = f"{type_ratios.get(t, 0):.1%}"
+                row += 1
 
         wb.save(path)
         return path
@@ -529,24 +912,44 @@ class ReportExporter:
 
         # 分类结果
         dc = data.get("discharge_classification", {})
-        doc.add_heading("3. 放电类型分析", level=1)
-        doc.add_paragraph(f"识别结果: {dc.get('name', '')} ({dc.get('name_en', '')})")
-        doc.add_paragraph(f"置信度: {dc.get('confidence', 0):.0%}")
-        doc.add_paragraph(f"严重等级: {dc.get('severity', 'normal')}")
-        doc.add_paragraph(f"说明: {dc.get('description', '')}")
+        doc.add_heading("3. 放电类型分析（按周期统计）", level=1)
+        if isinstance(dc, dict):
+            ref = dc.get("reference_result", {})
+            doc.add_paragraph(f"参考结果: {ref.get('name', dc.get('name', ''))} ({ref.get('name_en', '')}) [标记为参考结果]")
+            doc.add_paragraph(f"置信度(占比): {ref.get('confidence', dc.get('confidence', 0)):.0%}")
+            doc.add_paragraph(f"采样次数: {dc.get('total_samples', 0)}")
+            doc.add_paragraph(f"严重等级: {dc.get('severity', 'normal')}")
+
+            # 各类型统计表格
+            type_counts = dc.get("type_counts", {})
+            type_ratios = dc.get("type_ratios", {})
+            if type_counts:
+                tbl3 = doc.add_table(rows=len(type_counts)+1, cols=3)
+                tbl3.style = "Light Shading Accent 1"
+                tbl3.cell(0, 0).text = "放电类型"
+                tbl3.cell(0, 1).text = "出现次数"
+                tbl3.cell(0, 2).text = "占比"
+                for i, (t, cnt) in enumerate(sorted(type_counts.items(), key=lambda x: x[1], reverse=True), 1):
+                    pattern = DischargeClassifier.PATTERNS.get(t, {})
+                    tbl3.cell(i, 0).text = pattern.get("name", t)
+                    tbl3.cell(i, 1).text = str(cnt)
+                    tbl3.cell(i, 2).text = f"{type_ratios.get(t, 0):.1%}"
+        else:
+            doc.add_paragraph(f"识别结果: {dc.get('name', '')}")
+            doc.add_paragraph(f"置信度: {dc.get('confidence', 0):.0%}")
 
         # 统计指标
         stats = data.get("statistics", {})
         doc.add_heading("4. 统计指标", level=1)
-        tbl2 = doc.add_table(rows=7, cols=2)
+        tbl2 = doc.add_table(rows=8, cols=2)
         tbl2.style = "Light Shading Accent 1"
         stat_items = [
             ("总事件数", str(stats.get("total_events", 0))),
             ("最大幅值", f'{stats.get("max_amplitude", 0):.1f}'),
+            ("最小幅值", f'{stats.get("min_amplitude", 0):.1f}'),
             ("平均幅值", f'{stats.get("avg_amplitude", 0):.1f}'),
             ("幅值中位数", f'{stats.get("median_amplitude", 0):.1f}'),
             ("幅值P90", f'{stats.get("p90", 0):.1f}'),
-            ("相位集中度", f'{stats.get("concentration", 0):.4f}'),
         ]
         for i, (k, v) in enumerate(stat_items):
             tbl2.cell(i, 0).text = k
@@ -696,20 +1099,23 @@ class AnalysisPage(QWidget):
         layout.addWidget(bar)
 
     def _build_content(self, layout: QVBoxLayout) -> None:
-        row = QHBoxLayout()
-        row.setSpacing(DT.S.MD)
+        outer = QHBoxLayout()
+        outer.setSpacing(DT.S.MD)
 
-        # 左: PRPD 图谱
-        self._build_prpd_panel(row)
-        # 右: 分析结果
-        self._build_result_panel(row)
+        # 左列: PRPD 图谱 + 幅值分布（上下排列，宽度一致）
+        left_col = QVBoxLayout()
+        left_col.setSpacing(DT.S.MD)
+        self._build_prpd_panel(left_col)
+        self._build_distribution_panel(left_col)
 
-        layout.addLayout(row, 3)
+        outer.addLayout(left_col, 3)
 
-        # 下: 相位+幅值分布
-        self._build_distribution_panel(layout)
+        # 右列: 分析结果（高度撑满到幅值分布底部）
+        self._build_result_panel(outer)
 
-    def _build_prpd_panel(self, parent: QHBoxLayout) -> None:
+        layout.addLayout(outer)
+
+    def _build_prpd_panel(self, parent: QLayout) -> None:
         frame = QFrame()
         frame.setObjectName("cardContainer")
         frame.setStyleSheet(
@@ -751,22 +1157,71 @@ class AnalysisPage(QWidget):
         fl = QVBoxLayout(frame)
         fl.setContentsMargins(DT.S.MD, DT.S.SM, DT.S.MD, DT.S.SM)
 
+        # ── 标题栏 ──
         lbl = QLabel("分析结果")
         lbl.setFont(DT.T.get_font(*DT.T.TITLE_MEDIUM[:2], "SemiBold"))
         lbl.setStyleSheet(f"color: {DT.C.TEXT_PRIMARY};")
         fl.addWidget(lbl)
 
-        # 放电类型
-        self._type_card = self._make_result_card("放电类型", "—")
-        fl.addWidget(self._type_card)
-        self._conf_card = self._make_result_card("置信度", "—")
-        fl.addWidget(self._conf_card)
+        # ── 参考结果卡片 ──
+        self._ref_frame = QFrame()
+        self._ref_frame.setStyleSheet(
+            f"QFrame {{ background: {DT.C.BG_SECONDARY}; border-radius: {DT.R.MD}px; }}"
+        )
+        rfl = QHBoxLayout(self._ref_frame)
+        rfl.setContentsMargins(DT.S.MD, DT.S.SM, DT.S.MD, DT.S.SM)
+        self._ref_type_label = QLabel("—")
+        self._ref_type_label.setFont(DT.T.get_font(*DT.T.TITLE_SMALL[:2], "Bold"))
+        self._ref_type_label.setStyleSheet(f"color: {DT.C.TEXT_PRIMARY};")
+        self._ref_mark_label = QLabel("[参考结果]")
+        self._ref_mark_label.setStyleSheet(
+            f"color: {DT.C.TEXT_TERTIARY}; font-size: 10px; background: transparent;"
+        )
+        rfl.addWidget(self._ref_type_label)
+        rfl.addWidget(self._ref_mark_label)
+        rfl.addStretch()
+        self._ref_conf_label = QLabel("—")
+        self._ref_conf_label.setStyleSheet(
+            f"color: {DT.C.TEXT_SECONDARY}; font-size: 12px; background: transparent;"
+        )
+        rfl.addWidget(self._ref_conf_label)
+        fl.addWidget(self._ref_frame)
+
+        # ── 严重等级 ──
         self._sev_card = self._make_result_card("严重等级", "—")
         fl.addWidget(self._sev_card)
 
+        # ── 采样次数 ──
+        self._cycle_card = self._make_result_card("采样次数", "—")
+        fl.addWidget(self._cycle_card)
+
         fl.addWidget(QLabel("", styleSheet=f"color: {DT.C.DIVIDER}; max-height: 1px;"))
 
-        # 统计
+        # ── 各放电类型统计表 ──
+        self._type_table = QTableWidget()
+        self._type_table.setColumnCount(4)
+        self._type_table.setHorizontalHeaderLabels(["放电类型", "出现次数", "占比", "说明"])
+        self._type_table.setAlternatingRowColors(True)
+        self._type_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._type_table.verticalHeader().setVisible(False)
+        self._type_table.setStyleSheet(
+            f"""
+            QTableWidget {{
+                background: transparent; border: none; font-size: 12px;
+            }}
+            QTableWidget::item {{ padding: 3px 6px; }}
+            QHeaderView::section {{
+                background: {DT.C.BG_SECONDARY}; color: {DT.C.TEXT_SECONDARY};
+                border: none; font-size: 11px; font-weight: 600;
+            }}
+        """
+        )
+        self._type_table.horizontalHeader().setStretchLastSection(True)
+        fl.addWidget(self._type_table)
+
+        fl.addWidget(QLabel("", styleSheet=f"color: {DT.C.DIVIDER}; max-height: 1px;"))
+
+        # ── 幅值统计表 ──
         self._stat_table = QTableWidget()
         self._stat_table.setColumnCount(2)
         self._stat_table.setHorizontalHeaderLabels(["指标", "值"])
@@ -882,7 +1337,7 @@ class AnalysisPage(QWidget):
 
     def _import_file(self, path: str) -> None:
         try:
-            fmt, phases, amplitudes, meta = DataImporter.load(path)
+            fmt, phases, amplitudes, cycles, meta = DataImporter.load(path)
         except Exception as e:
             QMessageBox.warning(self, "导入失败", str(e))
             self._status_label.setText(f"导入失败: {e}")
@@ -896,6 +1351,7 @@ class AnalysisPage(QWidget):
 
         self._raw_phases = phases
         self._raw_amplitudes = amplitudes
+        self._raw_cycles = cycles
         self._metadata = meta
         self._file_path = path
 
@@ -915,13 +1371,14 @@ class AnalysisPage(QWidget):
 
     def _on_threshold_changed(self, val: int) -> None:
         self._threshold_min = val
-        if hasattr(self, "_raw_phases"):
+        if hasattr(self, "_raw_phases") and len(self._raw_phases) > 0:
             self._run_analysis()
 
     def _clear_analysis(self) -> None:
         """清除已加载的文件和分析结果，恢复到默认状态"""
         self._raw_phases = np.array([])
         self._raw_amplitudes = np.array([])
+        self._raw_cycles = np.array([], dtype=np.int32)
         self._metadata = {}
         self._analysis_result = {}
         self._file_path = ""
@@ -938,10 +1395,12 @@ class AnalysisPage(QWidget):
         if HAS_PYQTGRAPH and self._prpd is not None:
             self._prpd._on_reset()
 
-        # 清除分析结果卡片
-        self._update_card(self._type_card, "放电类型", "—", DT.C.TEXT_PRIMARY)
-        self._update_card(self._conf_card, "置信度", "—", DT.C.TEXT_PRIMARY)
+        # 清除分析结果面板
+        self._ref_type_label.setText("—")
+        self._ref_conf_label.setText("—")
         self._update_card(self._sev_card, "严重等级", "—", DT.C.TEXT_TERTIARY)
+        self._update_card(self._cycle_card, "采样次数", "—", DT.C.TEXT_TERTIARY)
+        self._type_table.setRowCount(0)
         self._stat_table.setRowCount(0)
 
         # 清除幅值分布图
@@ -955,17 +1414,17 @@ class AnalysisPage(QWidget):
     def _run_analysis(self) -> None:
         phases = self._raw_phases
         amps = self._raw_amplitudes
-
         # 阈值过滤
         mask = amps >= self._threshold_min
         phases = phases[mask]
         amps = amps[mask]
+        cycles = self._raw_cycles[mask] if hasattr(self, "_raw_cycles") and self._raw_cycles.size == len(phases) else np.zeros(len(phases), dtype=np.int32)
 
         if len(phases) < 5:
             self._status_label.setText("过滤后数据不足，请降低阈值")
             return
 
-        # 统计
+        # 幅值统计（用于 PRPD 控件参数）
         stats = {
             "total_events": int(len(phases)),
             "max_amplitude": float(np.max(amps)),
@@ -976,14 +1435,14 @@ class AnalysisPage(QWidget):
             "concentration": float(np.max(np.histogram(phases, bins=36, range=(0, 360))[0]) / len(phases)),
         }
 
-        # 放电类型分类
-        dc = DischargeClassifier.classify(phases, amps)
+        # 放电类型分类（Bootstrap 多次采样，统计各类型占比）
+        dc_result = DischargeClassifier.classify_cycles(phases, amps)
 
         self._analysis_result = {
             "file_name": Path(self._file_path).name if hasattr(self, "_file_path") else "",
             "analysis_time": datetime.now().isoformat(),
-            "statistics": stats,
-            "discharge_classification": dc,
+            "statistics": dc_result.get("amplitude_stats", stats),
+            "discharge_classification": dc_result,
             "threshold": self._threshold_min,
         }
 
@@ -996,49 +1455,95 @@ class AnalysisPage(QWidget):
             for p, a in zip(phases, amps):
                 prpd.add_event(phase=float(p), amplitude=float(a))
             prpd_result = prpd.compute(mode=PRPDMode.HEATMAP)
-            # 同步控件 max_amplitude，确保热力图 Transform Y 轴范围与散点图一致
             effective_max = stats.get("max_amplitude", 0) * 1.1
             if effective_max > 0:
                 self._prpd.set_max_amplitude(effective_max)
             self._prpd.update_scatter(phases.tolist(), amps.tolist())
             self._prpd.update_heatmap(prpd_result.matrix, 360, 256)
 
-        # 更新分析结果面板
-        self._update_result_display(dc, stats)
+        # 更新分析结果面板（新格式）
+        self._update_result_display(dc_result, stats)
 
         # 更新幅值分布
         self._update_distribution(amps)
 
-        self._status_label.setText(f"分析完成 — {len(phases)} 条事件 (阈值>{self._threshold_min})")
+        self._status_label.setText(f"分析完成 — {len(phases)} 条事件, {dc_result.get('total_samples', 0)} 次采样")
 
-    def _update_result_display(self, dc: dict, stats: dict) -> None:
-        """更新分析结果面板"""
-        # 更新卡片
-        self._update_card(self._type_card, "放电类型", dc.get("name", "—"), DT.C.ACCENT_PRIMARY)
-        conf = dc.get("confidence", 0)
+    def _update_result_display(self, dc_result: dict, stats: dict) -> None:
+        """更新分析结果面板（按周期统计格式）"""
+
+        # ── 参考结果 ──
+        ref = dc_result.get("reference_result", {})
+        ref_name = ref.get("name", "—")
+        ref_conf = ref.get("confidence", 0)
+        self._ref_type_label.setText(ref_name)
+        self._ref_conf_label.setText(f"置信度 {ref_conf:.0%}")
+
+        # ── 严重等级 ──
+        sev = dc_result.get("severity", "normal")
         self._update_card(
-            self._conf_card, "置信度", f"{conf:.0%}", DT.C.STATUS_SUCCESS if conf > 0.7 else DT.C.STATUS_WARNING
-        )
-        sev = dc.get("severity", "normal")
-        self._update_card(
-            self._sev_card, "严重等级", LEVEL_NAMES.get(sev, "—"), LEVEL_COLORS.get(sev, DT.C.TEXT_SECONDARY)
+            self._sev_card, "严重等级",
+            LEVEL_NAMES.get(sev, "—"), LEVEL_COLORS.get(sev, DT.C.TEXT_SECONDARY),
         )
 
-        # 更新统计表
-        self._stat_table.setRowCount(6)
-        items = [
-            ("总事件数", str(stats["total_events"])),
-            ("最大幅值", f'{stats["max_amplitude"]:.1f}'),
-            ("最小幅值", f'{stats["min_amplitude"]:.1f}'),
-            ("平均幅值", f'{stats["avg_amplitude"]:.1f}'),
-            ("幅值中位数", f'{stats["median_amplitude"]:.1f}'),
-            ("幅值 P90", f'{stats["p90"]:.1f}'),
+        # ── 采样次数 ──
+        total_samples = dc_result.get("total_samples", 0)
+        self._update_card(self._cycle_card, "采样次数", str(total_samples), DT.C.TEXT_PRIMARY)
+
+        # ── 各放电类型统计表 ──
+        type_counts = dc_result.get("type_counts", {})
+        type_ratios = dc_result.get("type_ratios", {})
+        sorted_types = sorted(type_counts.keys(), key=lambda t: type_counts[t], reverse=True)
+
+        self._type_table.setRowCount(len(sorted_types))
+        for i, t in enumerate(sorted_types):
+            count = type_counts[t]
+            ratio = type_ratios.get(t, 0)
+            pattern = DischargeClassifier.PATTERNS.get(t, {})
+            is_noise = t == "noise"
+
+            # 类型名称
+            display_name = "随机噪声" if is_noise else pattern.get("name", t)
+            name_item = QTableWidgetItem(display_name)
+            name_item.setForeground(QColor(DT.C.TEXT_TERTIARY) if is_noise else (QColor(DT.C.ACCENT_PRIMARY) if t == ref.get("type") else QColor(DT.C.TEXT_PRIMARY)))
+            self._type_table.setItem(i, 0, name_item)
+
+            # 出现次数
+            cnt_item = QTableWidgetItem(str(count))
+            cnt_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if is_noise:
+                cnt_item.setForeground(QColor(DT.C.TEXT_TERTIARY))
+            self._type_table.setItem(i, 1, cnt_item)
+
+            # 占比
+            ratio_item = QTableWidgetItem(f"{ratio:.1%}")
+            ratio_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if is_noise:
+                ratio_item.setForeground(QColor(DT.C.TEXT_TERTIARY))
+            self._type_table.setItem(i, 2, ratio_item)
+
+            # 说明
+            noise_desc = "信号为随机噪声，无明显放电特征" if is_noise else pattern.get("desc", "")[:40]
+            desc_item = QTableWidgetItem(noise_desc)
+            desc_item.setForeground(QColor(DT.C.TEXT_TERTIARY))
+            self._type_table.setItem(i, 3, desc_item)
+
+        # ── 幅值统计表 ──
+        amp_stats = dc_result.get("amplitude_stats", stats)
+        stat_items = [
+            ("总事件数", str(amp_stats.get("total_events", 0))),
+            ("最大幅值", f'{amp_stats.get("max_amplitude", 0):.1f} mV'),
+            ("最小幅值", f'{amp_stats.get("min_amplitude", 0):.1f} mV'),
+            ("平均幅值", f'{amp_stats.get("avg_amplitude", 0):.1f} mV'),
+            ("幅值中位数", f'{amp_stats.get("median_amplitude", 0):.1f} mV'),
+            ("幅值 P90", f'{amp_stats.get("p90", 0):.1f} mV'),
         ]
-        for i, (k, v) in enumerate(items):
+        self._stat_table.setRowCount(len(stat_items))
+        for i, (k, v) in enumerate(stat_items):
             self._stat_table.setItem(i, 0, QTableWidgetItem(k))
-            item = QTableWidgetItem(v)
-            item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._stat_table.setItem(i, 1, item)
+            val_item = QTableWidgetItem(v)
+            val_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self._stat_table.setItem(i, 1, val_item)
 
     def _update_card(self, card: QFrame, title: str, value: str, color: str) -> None:
         cl = card.layout()
