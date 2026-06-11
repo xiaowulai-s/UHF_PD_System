@@ -26,6 +26,7 @@ os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 if sys.platform == "win32":
     try:
         import ctypes
+
         # CP65001 = UTF-8 代码页
         ctypes.windll.kernel32.SetConsoleOutputCP(65001)
         ctypes.windll.kernel32.SetConsoleCP(65001)
