@@ -10,9 +10,23 @@ UHF PD Monitor 主窗口
 
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer
-from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QMainWindow, QMessageBox, QStackedWidget, QVBoxLayout, QWidget
+from datetime import datetime
+
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QAction, QFont, QIcon, QPixmap
+from PySide6.QtWidgets import (
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QStackedWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from core.utils.logger import get_logger
 from ui.design_tokens import DT
@@ -39,11 +53,89 @@ class PDMainWindow(QMainWindow):
         "系统设置",
     ]
 
+    CHANGELOG = [
+        {
+            "version": "v1.0.5",
+            "date": "2026-06-10",
+            "changes": [
+                "新增：关于对话框重构，Tab式版本日志（关于页+更新日志页）",
+                "新增：更新日志内嵌，CHANGELOG结构化存储，支持新增/优化/修复标签颜色区分",
+                "新增：关于页展示最新版本更新内容",
+                "优化：分类置信度计算，移除0.85硬性上限，改为直接使用最高占比类型投票率",
+                "优化：冗余文档清理，删除CHANGELOG.md、docs/下16个旧文档等，减少12000+行冗余内容",
+            ],
+        },
+        {
+            "version": "v1.0.4",
+            "date": "2026-06-10",
+            "changes": [
+                "新增：放电类型分类策略重设计（Profile Matching 替代规则引擎），8维特征+高斯核相似度+Softmax归一化",
+                "新增：幅值分布特征（变异系数/双峰性/正半周能量比），增强类型区分能力",
+                "新增：分析结果面板重构，参考结果卡片+类型统计表+幅值统计表，标记为参考结果",
+                "新增：Bootstrap多次采样统计，50次有放回采样，各类型出现次数和占比",
+                "新增：随机噪声(noise)识别与UI灰色显示",
+                "优化：分析页面布局，幅值分布宽度与PRPD一致，分析结果高度扩展至底部",
+                "优化：统一分类路径，移除classify_by_cycles，统一使用Bootstrap classify_cycles",
+                "修复：DataImporter解包缺少cycles的ValueError",
+            ],
+        },
+        {
+            "version": "v1.0.3",
+            "date": "2026-06-09",
+            "changes": [
+                "修复：热力图/密度图团簇方向错误，手动构建2D直方图+flipud修正ImageItem Y轴反转",
+                "修复：Jet颜色映射注册，PyQtGraph无内置jet，改为模块级直接引用",
+                "修复：_version崩溃，_show_about引用不存在的self._version",
+                "修复：动态幅值范围扩展，峰值超80%时自动扩展至peak×1.2并重建矩阵",
+                "修复：分析页面数据同步，添加缺失的set_max_amplitude调用",
+                "优化：调用顺序修正，先update_scatter后update_heatmap",
+                "优化：PRPS 3D散点图重构，替换为Matplotlib 3D懒加载+脏标记优化",
+                "优化：完整坐标轴系统、ColorBar集成、视觉比例优化",
+            ],
+        },
+        {
+            "version": "v1.0.2",
+            "date": "2026-06-05",
+            "changes": [
+                "新增：数据分析页面，导入CSV/Excel/TXT实验数据，PRPD图谱显示",
+                "新增：放电类型自动分类（内部气隙/电晕/沿面/悬浮颗粒）",
+                "新增：分类报告导出（JSON/Excel/Word）",
+                "新增：PRPD三种显示模式（散点图/热力图/密度图）",
+                "新增：文件拖放导入，自适应去噪和阈值过滤",
+                "优化：系统设置页重构、报警管理页按钮重新排布、设备管理页布局调整",
+                "修复：导航页索引偏移导致数据分析页不显示",
+            ],
+        },
+        {
+            "version": "v1.0.1",
+            "date": "2026-06-03",
+            "changes": [
+                "新增：实时监测设备/通道切换下拉框",
+                "新增：设备列表持久化（JSON保存/加载）",
+                "优化：设置变更实时推送到运行中服务",
+                "优化：PRPD/趋势list→deque、PRPS原地切片",
+                "修复：报警统计卡片遮挡、报警数据同步",
+            ],
+        },
+        {
+            "version": "v1.0.0",
+            "date": "2026-06-02",
+            "changes": [
+                "初始版本发布",
+                "核心功能：实时波形20FPS、PRPD/FFT/PRPS分析",
+                "核心功能：趋势分析(1h/24h/7d/30d)、三级报警管理",
+                "核心功能：FPGA通信协议(TCP+UDP)、数据模拟器",
+                "核心功能：Fluent Design界面、6个功能页面",
+                "25个集成测试、PyInstaller打包",
+            ],
+        },
+    ]
+
     def __init__(self, db_manager=None):
         super().__init__()
 
         self._db_manager = db_manager
-        self._version = "1.0.4"
+        self._version = "1.0.5"
         self._pages: dict[str, QWidget] = {}
         self._controller = None
 
@@ -269,27 +361,198 @@ class PDMainWindow(QMainWindow):
             self._status_label.setText(f"当前页面: {title}")
 
     def _show_about(self) -> None:
-        """显示关于对话框"""
-        QMessageBox.about(
-            self,
-            "关于",
-            f"<h3>{self.APP_NAME} v{self._version}</h3>"
-            "<p>超高频（UHF）局部放电在线监测系统</p>"
-            "<hr>"
-            "<p><b>开发架构:</b> Python 全栈架构</p>"
-            "<p><b>技术栈:</b> PySide6 · PyQtGraph · NumPy · SciPy · SQLAlchemy</p>"
-            "<p><b>功能特性:</b></p>"
-            "<ul>"
-            "<li>实时波形监测 (20 FPS)</li>"
-            "<li>PRPD / PRPS 图谱分析</li>"
-            "<li>FFT 频谱分析</li>"
-            "<li>趋势分析 (1h/24h/7d/30d)</li>"
-            "<li>三级报警管理</li>"
-            "<li>报表生成 (PDF/Excel)</li>"
-            "</ul>"
-            "<hr>"
-            f"<p>© 2026 UHF-PD-Monitor Team</p>",
+        """显示关于对话框（含切换更新日志）"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("关于")
+        dialog.setMinimumSize(560, 500)
+        dialog.setStyleSheet(
+            f"QDialog {{ background: {DT.C.BG_PRIMARY}; }}"
+            f"QLabel {{ color: {DT.C.TEXT_PRIMARY}; }}"
         )
+
+        main_layout = QVBoxLayout(dialog)
+        main_layout.setSpacing(12)
+
+        # ---------- 关于页内容 ----------
+        about_widget = QWidget()
+        about_layout = QVBoxLayout(about_widget)
+        about_layout.setContentsMargins(0, 0, 0, 0)
+        about_layout.setSpacing(12)
+
+        # 图标 + 标题行
+        header_row = QHBoxLayout()
+        icon_label = QLabel()
+        icon_path = "assets/icons/ems.png"
+        pixmap = QPixmap(icon_path)
+        if not pixmap.isNull():
+            icon_label.setPixmap(pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            icon_label.setText("[ICON]")
+        icon_label.setFixedSize(72, 72)
+        header_row.addWidget(icon_label)
+
+        title_col = QVBoxLayout()
+        title_label = QLabel(f"{self.APP_NAME}")
+        title_font = QFont()
+        title_font.setPointSize(16)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        title_label.setStyleSheet(f"color: {DT.C.ACCENT_PRIMARY};")
+        title_col.addWidget(title_label)
+
+        version_label = QLabel(f"版本 {self._version}")
+        version_label.setStyleSheet(f"color: {DT.C.TEXT_SECONDARY}; font-size: 13px;")
+        title_col.addWidget(version_label)
+
+        date_label = QLabel(f"构建日期: {self.CHANGELOG[0]['date']}")
+        date_label.setStyleSheet(f"color: {DT.C.TEXT_TERTIARY}; font-size: 12px;")
+        title_col.addWidget(date_label)
+
+        header_row.addLayout(title_col)
+        header_row.addStretch()
+        about_layout.addLayout(header_row)
+
+        # 分隔线
+        sep = QLabel()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet(f"background: {DT.C.BORDER_DEFAULT};")
+        about_layout.addWidget(sep)
+
+        # 描述
+        desc_label = QLabel(
+            "<p style='line-height:1.6;'>"
+            "超高频（UHF）局部放电在线监测系统，"
+            "实现电力设备局部放电信号的实时采集、图谱分析、趋势追踪与智能报警。"
+            "</p>"
+        )
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet(f"color: {DT.C.TEXT_PRIMARY}; font-size: 13px;")
+        about_layout.addWidget(desc_label)
+
+        # 最新版本更新日志
+        latest = self.CHANGELOG[0]
+        latest_html_parts = [
+            f"<h4 style='margin:12px 0 4px 0; color:{DT.C.TEXT_PRIMARY};'>"
+            f"{latest['version']} 更新内容"
+            f"<span style='font-weight:normal;font-size:12px;color:{DT.C.TEXT_TERTIARY};margin-left:8px;'>{latest['date']}</span></h4>"
+        ]
+        latest_html_parts.append('<ul style="margin:4px 0 0 0;">')
+        for change in latest["changes"]:
+            if change.startswith("新增"):
+                tag_color = "#34a853"
+            elif change.startswith("优化"):
+                tag_color = "#fbbc04"
+            elif change.startswith("修复"):
+                tag_color = "#ea4335"
+            else:
+                tag_color = DT.C.TEXT_SECONDARY
+            tag, _, detail = change.partition("：")
+            latest_html_parts.append(
+                f'<li style="line-height:1.5;margin:2px 0;">'
+                f'<span style="color:{tag_color};font-weight:bold;font-size:11px;">[{tag}]</span> '
+                f'{detail}</li>'
+            )
+        latest_html_parts.append("</ul>")
+
+        latest_label = QLabel("".join(latest_html_parts))
+        latest_label.setWordWrap(True)
+        latest_label.setStyleSheet(f"color: {DT.C.TEXT_PRIMARY}; font-size: 12px;")
+        about_layout.addWidget(latest_label)
+
+        about_layout.addStretch()
+
+        # ---------- 更新日志页内容 ----------
+        changelog_widget = QWidget()
+        changelog_layout = QVBoxLayout(changelog_widget)
+        changelog_layout.setContentsMargins(0, 0, 0, 0)
+
+        changelog_text = QTextEdit()
+        changelog_text.setReadOnly(True)
+        changelog_text.setStyleSheet(
+            f"QTextEdit {{"
+            f"  background: {DT.C.BG_SECONDARY};"
+            f"  border: none;"
+            f"  border-radius: {DT.R.SM}px;"
+            f"  padding: 8px;"
+            f"  color: {DT.C.TEXT_PRIMARY};"
+            f"  font-size: 13px;"
+            f"}}"
+        )
+
+        # 构建 HTML 格式更新日志
+        html_parts = []
+        for entry in self.CHANGELOG:
+            html_parts.append(
+                f"<h3 style='margin:16px 0 4px 0; color:{DT.C.TEXT_PRIMARY};'>{entry['version']}"
+                f"<span style='font-weight:normal;font-size:12px;color:{DT.C.TEXT_TERTIARY};margin-left:8px;'>{entry['date']}</span></h3>"
+            )
+            html_parts.append('<ul style="margin:4px 0 8px 0;">')
+            for change in entry["changes"]:
+                if change.startswith("新增"):
+                    tag_color = "#34a853"
+                elif change.startswith("优化"):
+                    tag_color = "#fbbc04"
+                elif change.startswith("修复"):
+                    tag_color = "#ea4335"
+                else:
+                    tag_color = DT.C.TEXT_SECONDARY
+                tag, _, detail = change.partition("：")
+                html_parts.append(
+                    f'<li style="line-height:1.5;margin:2px 0;">'
+                    f'<span style="color:{tag_color};font-weight:bold;font-size:11px;">[{tag}]</span> '
+                    f'{detail}</li>'
+                )
+            html_parts.append("</ul>")
+
+        changelog_text.setHtml("".join(html_parts))
+        changelog_layout.addWidget(changelog_text)
+
+        # ---------- 使用 QStackedWidget 切换 ----------
+        stacked = QStackedWidget()
+        stacked.addWidget(about_widget)       # index 0
+        stacked.addWidget(changelog_widget)   # index 1
+        main_layout.addWidget(stacked)
+
+        # 底部按钮行
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+
+        toggle_btn = QPushButton("更新日志")
+        toggle_btn.setStyleSheet(
+            f"QPushButton {{"
+            f"  background: transparent; color: {DT.C.ACCENT_PRIMARY}; border: 1px solid {DT.C.ACCENT_PRIMARY};"
+            f"  border-radius: {DT.R.SM}px; padding: 8px 24px; font-size: 13px;"
+            f"}}"
+            f"QPushButton:hover {{ background: {DT.C.BG_SECONDARY}; }}"
+        )
+
+        def _toggle_page():
+            if stacked.currentIndex() == 0:
+                stacked.setCurrentIndex(1)
+                toggle_btn.setText("关于")
+                dialog.setWindowTitle("更新日志")
+            else:
+                stacked.setCurrentIndex(0)
+                toggle_btn.setText("更新日志")
+                dialog.setWindowTitle("关于")
+
+        toggle_btn.clicked.connect(_toggle_page)
+        btn_row.addWidget(toggle_btn)
+
+        close_btn = QPushButton("关闭")
+        close_btn.setStyleSheet(
+            f"QPushButton {{"
+            f"  background: {DT.C.ACCENT_PRIMARY}; color: white; border: none;"
+            f"  border-radius: {DT.R.SM}px; padding: 8px 24px; font-size: 13px;"
+            f"}}"
+            f"QPushButton:hover {{ background: {DT.C.ACCENT_HOVER}; }}"
+        )
+        close_btn.clicked.connect(dialog.accept)
+        btn_row.addWidget(close_btn)
+
+        main_layout.addLayout(btn_row)
+
+        dialog.exec()
 
     def closeEvent(self, event) -> None:
         """关闭时保存窗口状态"""

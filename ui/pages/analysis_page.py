@@ -501,9 +501,6 @@ class DischargeClassifier:
         best_type = max(scores, key=scores.get)
         confidence = scores[best_type]
 
-        # 置信度上限: 真实数据必然含干扰, 不可能100%
-        confidence = min(confidence, 0.85)
-
         # 严重等级
         severity = "normal"
         if max_amp > 5000 or p90 > 3000:
@@ -647,15 +644,15 @@ class DischargeClassifier:
         best_count = type_counts.get(best_type, 0)
         best_ratio = best_count / total if total > 0 else 0
 
-        # 置信度上限: 真实实验数据必然含干扰, 不可能100%
-        capped_confidence = min(best_ratio, 0.85)
+        # 置信度 = 最高占比类型投票率
+        confidence = best_ratio
 
         pattern = cls.PATTERNS.get(best_type, {})
         reference_result = {
             "type": best_type,
             "name": pattern.get("name", best_type),
             "name_en": pattern.get("name_en", best_type),
-            "confidence": float(f"{capped_confidence:.2f}"),
+            "confidence": float(f"{confidence:.2f}"),
             "marked_as": "参考结果",
             "description": pattern.get("desc", ""),
         }
@@ -737,15 +734,15 @@ class DischargeClassifier:
         best_count = type_counts.get(best_type, 0)
         best_ratio = best_count / total if total > 0 else 0
 
-        # 置信度上限: 真实实验数据必然含干扰, 不可能100%
-        capped_confidence = min(best_ratio, 0.85)
+        # 置信度 = 最高占比类型投票率
+        confidence = best_ratio
 
         pattern = cls.PATTERNS.get(best_type, {})
         reference_result = {
             "type": best_type,
             "name": pattern.get("name", best_type),
             "name_en": pattern.get("name_en", best_type),
-            "confidence": float(f"{capped_confidence:.2f}"),
+            "confidence": float(f"{confidence:.2f}"),
             "marked_as": "参考结果",
             "description": pattern.get("desc", ""),
         }
