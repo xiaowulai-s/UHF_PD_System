@@ -16,14 +16,34 @@
     python pd_main.py --simulator --pd-type corona  # 指定局放类型
 """
 
+# ── 编码修复（必须在所有 import 之前）─────────────────
+import os
+import sys
+
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+
+# Windows 控制台强制 UTF-8
+if sys.platform == "win32":
+    try:
+        import ctypes
+        # CP65001 = UTF-8 代码页
+        ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+        ctypes.windll.kernel32.SetConsoleCP(65001)
+    except Exception:
+        pass
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 import argparse
 import json
-import sys
 from pathlib import Path
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="超高频局部放电在线监测系统 v1.0")
+    parser = argparse.ArgumentParser(description="超高频局部放电在线监测系统 v1.0.6")
     parser.add_argument("--simulator", action="store_true", help="启动数据模拟器（无需 FPGA 硬件）")
     parser.add_argument(
         "--pd-type",
@@ -52,7 +72,7 @@ def main() -> int:
     setup_logging(log_level=args.log_level, log_file="logs/pd_system/pd_monitor.log")
     logger = get_logger("pd_system")
     logger.info("=" * 50)
-    logger.info("超高频局部放电在线监测系统 v1.0 启动中...")
+    logger.info("超高频局部放电在线监测系统 v1.0.6 启动中...")
     logger.info("=" * 50)
     logger.info("启动参数: simulator=%s, pd_type=%s, fps=%d", args.simulator, args.pd_type, args.fps)
 
@@ -97,7 +117,7 @@ def main() -> int:
         QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
     app = QApplication(sys.argv)
-    PD_VERSION = "1.0.1"
+    PD_VERSION = "1.0.6"
     app.setApplicationName("超高频局部放电在线监测系统")
     app.setApplicationVersion(PD_VERSION)
     app.setOrganizationName("UHF-PD-Monitor")

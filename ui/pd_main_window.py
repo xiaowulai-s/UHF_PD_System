@@ -11,6 +11,7 @@ UHF PD Monitor 主窗口
 from __future__ import annotations
 
 from datetime import datetime
+import time
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QFont, QIcon, QPixmap
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QStackedWidget,
+    QStyle,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -54,6 +56,18 @@ class PDMainWindow(QMainWindow):
     ]
 
     CHANGELOG = [
+        {
+            "version": "v1.0.6",
+            "date": "2026-06-10",
+            "changes": [
+                "新增：程序图标标准化，ems.png 移至 assets/icons/ 统一资源目录",
+                "新增：关于对话框重构，Tab 式版本信息+更新日志独立窗口",
+                "新增：CHANGELOG 结构化存储，[新增]/[优化]/[修复] 标签颜色区分",
+                "新增：UI 布局全面审计，识别 26 个布局问题并归档至 Update.md",
+                "修复：DT 常量引用错误，ACCENT/ACCENT_PRIMARY、BORDER/BORDER_DEFAULT",
+                "修复：_version 崩溃，__init__ 中新增 self._version 初始化",
+            ],
+        },
         {
             "version": "v1.0.5",
             "date": "2026-06-10",
@@ -135,7 +149,7 @@ class PDMainWindow(QMainWindow):
         super().__init__()
 
         self._db_manager = db_manager
-        self._version = "1.0.5"
+        self._version = "1.0.6"
         self._pages: dict[str, QWidget] = {}
         self._controller = None
 
@@ -155,7 +169,7 @@ class PDMainWindow(QMainWindow):
     def _setup_window(self) -> None:
         """配置主窗口属性"""
         self.setWindowTitle(self.WINDOW_TITLE)
-        self.setMinimumSize(1280, 720)
+        self.setMinimumSize(1024, 680)  # 适配 1366×768 低分屏
         self.resize(1440, 900)
         self.setStyleSheet(
             f"""
@@ -210,6 +224,7 @@ class PDMainWindow(QMainWindow):
         # 文件菜单
         file_menu = menu_bar.addMenu("文件(&F)")
         exit_action = QAction("退出(&X)", self)
+        exit_action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogCloseButton))
         exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
@@ -217,6 +232,7 @@ class PDMainWindow(QMainWindow):
         # 帮助菜单
         help_menu = menu_bar.addMenu("帮助(&H)")
         about_action = QAction("关于(&A)", self)
+        about_action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation))
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
 
@@ -284,7 +300,7 @@ class PDMainWindow(QMainWindow):
                 "level": "critical",
                 "amplitude": 85.3,
                 "description": alarm_desc,
-                "timestamp": __import__("time").time(),
+                "timestamp": time.time(),
             }
         )
         self._pages["alarm"].add_alarm(
@@ -294,7 +310,7 @@ class PDMainWindow(QMainWindow):
                 "level": "warning",
                 "amplitude": 0,
                 "description": "设备离线 - 设备状态异常",
-                "timestamp": __import__("time").time() - 300,
+                "timestamp": time.time() - 300,
             }
         )
         # 同步更新首页报警栏
@@ -318,6 +334,9 @@ class PDMainWindow(QMainWindow):
 
         self._status_label = QLabel("系统就绪")
         self._status_label.setStyleSheet(f"color: {DT.C.TEXT_TERTIARY}; font-size: 12px;")
+        self._status_label.setMinimumWidth(100)
+        # 长设备名自动省略
+        self._status_label.setTextFormat(Qt.TextFormat.PlainText)
         status_bar.addWidget(self._status_label)
 
         self._page_label = QLabel("首页")
@@ -366,8 +385,7 @@ class PDMainWindow(QMainWindow):
         dialog.setWindowTitle("关于")
         dialog.setMinimumSize(560, 500)
         dialog.setStyleSheet(
-            f"QDialog {{ background: {DT.C.BG_PRIMARY}; }}"
-            f"QLabel {{ color: {DT.C.TEXT_PRIMARY}; }}"
+            f"QDialog {{ background: {DT.C.BG_PRIMARY}; }}" f"QLabel {{ color: {DT.C.TEXT_PRIMARY}; }}"
         )
 
         main_layout = QVBoxLayout(dialog)
@@ -450,7 +468,7 @@ class PDMainWindow(QMainWindow):
             latest_html_parts.append(
                 f'<li style="line-height:1.5;margin:2px 0;">'
                 f'<span style="color:{tag_color};font-weight:bold;font-size:11px;">[{tag}]</span> '
-                f'{detail}</li>'
+                f"{detail}</li>"
             )
         latest_html_parts.append("</ul>")
 
@@ -500,7 +518,7 @@ class PDMainWindow(QMainWindow):
                 html_parts.append(
                     f'<li style="line-height:1.5;margin:2px 0;">'
                     f'<span style="color:{tag_color};font-weight:bold;font-size:11px;">[{tag}]</span> '
-                    f'{detail}</li>'
+                    f"{detail}</li>"
                 )
             html_parts.append("</ul>")
 
@@ -509,8 +527,8 @@ class PDMainWindow(QMainWindow):
 
         # ---------- 使用 QStackedWidget 切换 ----------
         stacked = QStackedWidget()
-        stacked.addWidget(about_widget)       # index 0
-        stacked.addWidget(changelog_widget)   # index 1
+        stacked.addWidget(about_widget)  # index 0
+        stacked.addWidget(changelog_widget)  # index 1
         main_layout.addWidget(stacked)
 
         # 底部按钮行

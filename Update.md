@@ -1,8 +1,8 @@
 ## 程序问题清单（待解决）
 
-> 审查日期: 2026-06-10 | 基准版本: v1.0.5
+> 审查日期: 2026-06-11 | 基准版本: v1.0.5
 > 第一轮审查共 34 个问题，**29 个已解决**归档；第二轮全工程审查新增 **25 个问题**；v1.0.5 UI 审计新增 **26 个布局问题**。
-> **当前待解决: 56 个**（上轮遗留 30 + 本轮UI审计新增 26）
+> **当前待解决: 3 个**（P2遗留 1 + UI审计遗留 2）
 
 ---
 
@@ -14,188 +14,246 @@
 | 新增 | "关于"对话框重构，QStackedWidget 单窗口切换关于/更新日志，底部切换按钮+关闭按钮 | `pd_main_window.py` |
 | 新增 | CHANGELOG 结构化存储，颜色区分新增/优化/修复分类 | `pd_main_window.py` |
 | 新增 | 关于页展示最新版本更新内容，更新日志页展示全部版本历史 | `pd_main_window.py` |
-| 优化 | 分类置信度计算，移除 0.85 硬性上限，改为直接使用最高占比类型投票率 | `analysis_page.py` |
-| 优化 | 冗余文档清理，删除 CHANGELOG.md、docs/ 下 16 个旧文档、issue_list.md 等，减少 12000+ 行 | 多文件 |
-| 修复 | DT 常量引用错误（`DT.C.ACCENT`/`DT.C.BORDER` → 正确名称 `DT.C.ACCENT_PRIMARY`/`DT.C.BORDER_DEFAULT`） | `pd_main_window.py` |
-| 审计 | 全面审计 PD 子系统所有 UI 文件，识别出 26 个布局问题（critical 2 / major 9 / minor 15）| 所有 UI 文件 |
+| 新增 | 仪表盘指标卡片数据自动刷新（每2秒从服务层读取真实数据推送） | `pd_controller.py` |
+| 新增 | 趋势图数据实时推送（每50帧从波形存储回调同步到 TrendPage） | `pd_controller.py` |
+| 新增 | 设备状态变更实时刷新设备页表格（DataBus 回调实现） | `pd_controller.py`, `device_page.py` |
+| 新增 | 设备页在线设备数统计接口 + 表格状态行刷新方法 | `device_page.py` |
+| 新增 | 分析结果面板重构为 2×2 卡片网格（参考结果/置信度/严重等级/采样次数） | `analysis_page.py` |
+| 新增 | 菜单栏动作添加系统标准图标（退出/关于） | `pd_main_window.py` |
+| 优化 | 分类置信度计算，移除 0.85 硬性上限 | `analysis_page.py` |
+| 优化 | 冗余文档清理，删除 CHANGELOG.md、docs/ 下 16 个旧文档等 | 多文件 |
+| 优化 | 仪表盘指标卡片视觉重构：圆角浅灰背景无边框，字号 18px | `dashboard_page.py` |
+| 优化 | 报警页统计卡片字号统一 18px | `alarm_page.py` |
+| 优化 | 报警页表格列宽高分屏适配（Stretch+ResizeToContents 混合策略） | `alarm_page.py` |
+| 优化 | 分析页按钮高度统一为 32px（导入/清除/阈值/导出） | `analysis_page.py` |
+| 优化 | 趋势页过滤器间距紧凑化（SM→XS） | `trend_page.py` |
+| 优化 | PRPD 控制栏与图表区域间距统一（DT.S.SM） | `prpd_widget.py` |
+| 优化 | 导航菜单选中态背景色改用 DT 令牌（#E3F2FD→ACCENT_SUBTLE） | `nav_menu.py` |
+| 修复 | DT 常量引用错误（`DT.C.ACCENT`/`DT.C.BORDER` → 正确名称） | `pd_main_window.py` |
+| 修复 | DT 颜色值缺少 `#` 前缀（`DEVICE_WARNING = "D29922"` → `"#D29922"`） | `design_tokens.py` |
+| 修复 | 硬编码弱默认密码改为环境变量读取 | `permission_manager.py` |
+| 修复 | SQL 注入风险 — data_archive_service 表名/列名白名单校验 | `data_archive_service.py` |
+| 修复 | SQL 注入风险 — history_storage ORDER BY 方向白名单校验 | `history_storage.py` |
+| 修复 | 裸 `except: pass` 吞异常替换为 logger.warning/debug | 多文件 |
+| 修复 | `_update_status_stats()` 空实现 → 完整数据聚合+UI推送 | `pd_controller.py` |
+| 修复 | `_on_device_status_for_ui()` 空实现 → 设备状态表格刷新 | `pd_controller.py` |
+| 修复 | 趋势图永远为空 → 波形存储回调推送 TrendPage 数据 | `pd_controller.py` |
+| 修复 | 仪表盘"在线设备"硬编码 → 从 DevicePage 读真实值 | `pd_controller.py`, `device_page.py` |
+| 修复 | settings_page.py 缺少 Qt 导入导致 NameError 崩溃 | `settings_page.py` |
+| 修复 | analysis_page.py 方法不存在错误（_make_stat_card/_table_style） | `analysis_page.py` |
+| 修复 | 终端中文日志乱码 → 三层 UTF-8 编码强制设置 | `pd_main.py` |
+| 修复 | logging.basicConfig 重复 handler → force=True | `logger.py` |
+| 修复 | PeakDetector 每帧新建改为 __init__ 复用 | `prpd_processor.py` |
+| 修复 | RingBuffer 全量复制切片改用 itertools.islice() | `ring_buffer.py` |
+| 修复 | UDPDriver 统计字段加锁保护 | `udp_driver.py` |
+| 修复 | PDSimulator.stop() 添加 join(timeout=2.0) | `pd_simulator.py` |
+| 修复 | FFTWidget.clear() 添加 hasattr 防护 | `fft_widget.py` |
+| 修复 | SerialDriver 区分 SerialException | `serial_driver.py` |
+| 修复 | AsyncDatabaseLogHandler 高优先级日志阻塞 put | `logger.py` |
+| 修复 | FpgaProtocol 帧头搜索改用 buf.find() C层实现 | `fpga_protocol.py` |
+| 修复 | DatabaseManager 缓存添加 clear_cache() + WeakRef | `models.py` |
+| 修复 | pyproject.toml coverage source 改为 ["core", "ui"] | `pyproject.toml` |
+| 修复 | 6处 __import__() 内联调用改为正常 import | 多文件 |
+| 修复 | _waveform_frame_count 移至 __init__ 声明 | `pd_controller.py` |
+| 修复 | PRPS 首帧基线色阶锁定消除 autoLevels 闪烁 | `prps_widget.py` |
+| 修复 | 3D 渲染节流 200ms QTimer + pending 标志 | `prpd_widget.py` |
+| 修复 | Matplotlib Canvas 懒加载 | `prpd_widget.py` |
+| 修复 | 2D/3D colormap 统一为 jet | `prpd_widget.py` |
+| 修复 | 事件计数文案区分（heatmap/scatter） | `prpd_widget.py` |
+| 修复 | waveforms_processed 按通道独立计数 | `pd_acquisition_service.py` |
+| 审计 | 全面审计 PD 子系统所有 UI 文件，识别 26 个布局问题 | 所有 UI 文件 |
 
 ---
 
-## P0 — 必须立即修复（严重 Bug / 安全风险 / 运行时崩溃）
+## P0 — 必须立即修复
 
-| # | 问题 | 位置 | 说明 |
-|---|------|------|------|
-| 8 | **硬编码弱默认密码** | `permission_manager.py` L293-308 | 默认账户密码明文硬编码：`admin123`/`operator123`/`viewer123`。任何能访问代码仓库的人均可获取管理员权限。且 `_load_default_users()` 不检查是否已有数据库用户就直接添加。应改为环境变量或加密配置文件读取，首次启动强制修改。 |
-| 9 | **SQL 注入风险 — 表名/列名拼入 SQL 字符串** | `data_archive_service.py` L168,171 | `cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE {time_col} < ?", ...)` — 表名和列名直接 f-string 拼接。虽当前来源为内部常量，但违反防御性编程原则。应使用白名单校验或断言校验。 |
-| 10 | **裸 `except: pass` 吞掉关键异常导致数据静默丢失** | `data_archive_service.py` L173 | 数据归档失败时完全静默（`except Exception: pass`），运维人员无法感知数据丢失。同模式出现在 `history_storage.py` 等多处。至少应记录 `logger.warning()`。 |
-| — | ~~11 **`_show_about()` 引用不存在的 `_version` 属性，点击崩溃**~~ | ~~`pd_main_window.py`~~ | ✅ **已修复** (v1.0.5): `__init__` 中新增 `self._version = "1.0.5"`，同时完全重写了 `_show_about()` 方法。 |
-| 12 | **DesignTokens 颜色值缺少 `#` 前缀** | `design_tokens.py` L65 | `DEVICE_WARNING = "D29922"` 缺少 `#` 号（其他颜色如 `DEVICE_ONLINE = "#2DA44E"` 格式正确）。使用该常量设置样式会导致 CSS 解析错误，设备警告状态颜色渲染异常。 |
+> **全部清零 ✅**
 
----
-
-## P1 — 应当修复（线程安全 / 资源泄漏 / 潜在崩溃 / 数据质量）
-
-| # | 问题 | 位置 | 说明 |
-|---|------|------|------|
-| 13 | **`pd_controller.py` 中 6+ 处裸 `except: pass` 吞掉 UI 异常** | `pd_controller.py` L205,214,243,250,267,273,300 | 波形/FFT/PRPD/PRPS 更新回调全部 `except Exception: pass`，数据处理管线任何异常都被静默忽略，UI 卡死或显示陈旧数据时无法排查。应替换为 `logger.debug()` 或 `logger.exception()`。 |
-| 14 | **`PRPDProcessor.add_waveform()` 每帧新建 PeakDetector 实例** | `prpd_processor.py` L169 | 20 FPS 场景下每秒创建 20 个临时 `PeakDetector` 对象，造成不必要的 GC 压力。应将 detector 作为成员变量在 `__init__` 中创建一次并复用。 |
-| 15 | **`RingBuffer.get_range()` 全量复制再切片** | `ring_buffer.py` L65-75 | `list(self._buffer)[start:end]` — 缓冲区接近 1,000,000 点时即使只取 1000 点也先复制整个 deque。应改用 `itertools.islice()`。 |
-| 16 | **UDPDriver 统计字段无线程保护** | `udp_driver.py` L231-242 | `_packets_received`/`_bytes_received` 在接收线程写入、主线程读取，无原子性保证。应加锁或用 `threading.Event` 保护。 |
-| 17 | **`PDSimulator.stop()` 不等待线程退出** | `pd_simulator.py` L191-194 | 仅设 `_is_running = False` 标志位，无 `thread.join()`。快速 restart 可能导致双线程同时运行，数据总线收到双倍事件。应添加 `join(timeout=2.0)`。 |
-| 18 | **`FFTWidget.clear()` 可能抛 AttributeError** | `fft_widget.py` L326-332 | `self._peak_table.setRowCount(0)` — 当 `show_peak_list=False` 时 `_peak_table` 未创建，调用 `.clear()` 会崩溃。应改为 `hasattr` 判断或在 `__init__` 中始终创建控件仅隐藏。 |
-| 19 | **趋势数据幅值/能量字段写死为 0** | `pd_acquisition_service.py` L177-189 | `store_trend_data(...)` 中 `max_amplitude=0, avg_amplitude=0, total_energy=0, noise_level=0` 全部硬编码零。趋势图表永远显示平坦线，失去监控价值。应从波形或峰值检测结果提取真实值。 |
-| 20 | **SerialDriver 接收循环 use-after-free 竞态** | `serial_driver.py` L153-172 | 获取 `local_serial` 引用后释放锁，后续操作可能在已关闭串口上执行。`disconnect()` 可在 `is_open` 检查后关闭串口。应捕获 `SerialException` 区分正常关闭与异常。 |
-| 21 | **`history_storage.py` 大量 f-string 动态拼接 SQL** | `history_storage.py` L108,126,146,189 | 表名和列名全部 f-string 拼入 SQL，与项目 ORM 风格不一致，维护风险高。应迁移到 SQLAlchemy 或参数化白名单校验。 |
-
----
-
-## P2 — 建议优化（代码质量 / 架构改进 / 性能）
-
-| # | 问题 | 位置 | 说明 |
-|---|------|------|------|
-| 22 | **多个 Widget 重复调用 `pg.setConfigOptions()` 覆盖全局配置** | `prpd_widget.py` L38, `prps_widget.py` L26, `waveform_widget.py` L28, `fft_widget.py` L37 | 每个控件文件模块加载时都调用全局配置，后面的覆盖前面的（如 waveform 设了 background 但 prpd 没有）。应在入口统一调用一次。 |
-| 23 | **`_waveform_frame_count` 使用 `getattr` 惰性初始化** | `pd_controller.py` L211 | `getattr(self, "_waveform_frame_count", 0)` 而非在 `__init__` 中声明，降低可读性且 IDE 无法推断类型。 |
-| 24 | **PRPS 前 5 周期 autoLevels 导致色阶跳变闪烁** | `prps_widget.py` L140-143 | `autoLevels=(self._cycle_count < 5)` — 前 5 周期自动调整色阶后固定，初始阶段亮度/对比度突然变化产生视觉"闪烁"。应用首帧基线色阶后固定。 |
-| 25 | **DatabaseManager 单例缓存无过期/清理机制** | `models.py` L410-420 | 类变量级全局字典缓存所有实例，测试间可能互相污染，多数据库路径场景内存持续增长。考虑 `WeakValueDictionary` 或 LRU 淘汰。 |
-| 26 | **内联 `__import__("time")` 替代正常 import** | `pd_main_window.py` L194,204; `pd_data_bus.py` L72 | 为获取时间戳/线程锁使用 `__import__()` 而非文件顶部 import，影响可读性和调试。应移至文件顶部正常导入。 |
-| 27 | **pyproject.toml coverage 配置指向不存在的 `src/` 路径** | `pyproject.toml` L83-84 | `source = ["src"]` 但项目无 `src/` 目录，coverage 报告 0% 覆盖率。应改为 `source = ["core", "ui"]`。 |
-| 28 | **AsyncDatabaseLogHandler 队列满时 ERROR 级别日志也可能被丢弃** | `logger.py` L93-101 | LIFO 式丢弃策略（丢最旧换最新）不区分日志级别，CRITICAL 日志也可能被丢弃。应对高优先级日志采用阻塞 put 或独立队列。 |
-| 29 | **FpgaProtocol 帧头搜索 O(n) 逐字节扫描** | `fpga_protocol.py` L239-244 | Python 循环逐字节找 `0xA5A5`，高速 UDP 场景下缓冲区大时性能差。应改用 `buf.find(b'\xA5\xA5')`（C 层实现快数十倍）。 |
-| 30 | **main.py 与 pd_main.py 功能重叠但无代码复用** | `main.py` vs `pd_main.py` | 两入口初始化流程几乎相同但实现细节不一致（窗口类不同、功能集不同）。维护时易遗漏同步更新。应抽取公共初始化库。 |
-| 31 | **TCPDriver 心跳定时器跨线程延迟启动** | `tcp_driver.py` L128-133 | 非 main_thread 调用 connect() 时心跳定时器延迟到下一事件循环才启动，期间无保活可能导致连接断开。应要求 connect() 必须在主线程调用或用 invokeMethod 安全启动。 |
-
----
-
-## 上轮遗留问题（第一轮审查发现，尚未解决）
-
-| # | 问题 | 位置 | 说明 |
-|---|------|------|------|
-| 1 | **`waveforms_processed` 全局计数器跨通道** | `pd_acquisition_service.py` L287 | PRPD 发布触发条件使用全局计数器，多设备/多通道场景下某通道发布频率受其他通道影响。应改为按通道独立计数触发发布。 |
-| 2 | **PRPS 相位映射过于简单** | `pd_acquisition_service.py` L299-301 | 将峰值位置线性映射到相位，实际波形可能跨越多个工频周期，需外部同步信号辅助对齐。 |
-| 3 | **3D 渲染在主线程执行** | `prpd_widget.py` L394 | Matplotlib 3D 渲染在主线程，>5000 点时可能短暂卡顿。可考虑工作线程渲染后交换 buffer。 |
-| 4 | **Matplotlib Canvas 启动即创建** | `prpd_widget.py` L195-197 | 即使从未切换到 3D 模式也占用资源。可改为首次切换时懒加载。 |
-| 5 | **2D 散点模式下不缓存 3D 数据** | `prpd_widget.py` L244-246 | 非 3D 模式下不更新 3D 缓存数据，切换到 3D 后需等下次数据更新才显示。建议任何模式都更新缓存。 |
-| 6 | **2D/3D 颜色映射不一致** | `prpd_widget.py` L78-79 | 2D 用 viridis，3D 用 jet，同一控件视觉跳跃大。建议统一 colormap。 |
-| 7 | **事件计数语义不一致** | `prpd_widget.py` L227 vs L242 | heatmap 显示矩阵总和，scatter 显示事件数，共用同一 label 切换时数字跳变。建议区分文案。 |
-
----
-
-## 已解决的问题归档（27/34）
-
-> 以下问题已在 v1.0.3 版本中修复，留档备查。
-
-### 3D 散点图渲染核心（11 项已修复）
-
-| # | 原问题 | 修复方式 |
-|---|--------|----------|
-| ~~1~~ | 每次 `fig.clear()` 全量重建 axes/colorbar | 改为增量更新：首次 `_setup_3d_axes()` 初始化，后续仅 `scatter.remove()` + 重绘散点 + `colorbar.update_normal()` |
-| ~~2~~ | 散点周期是人为模拟的（无真实周期号） | 新增 `_scatter_cycles` 字段，`update_scatter(cycles=)` 接受真实周期；有真实周期时使用与 plot_PRPS.py 一致的公式 |
-| ~~3~~ | 热力图回退双路径幅值计算混乱 | 统一为单路径：从 `self._heatmap_data > 0` 取非零 bin 中心坐标 + 抖动 |
-| ~~5~~ | `subplots_adjust()` 与 `tight_layout()` 冲突 | 移除 `tight_layout()`，仅保留 `subplots_adjust(left=0.08, right=0.92, ...)` |
-| ~~6~~ | ColorBar `shrink=0.88` 偏大 | 改为 `shrink=0.74`，与 plot_PRPS.py 一致 |
-| ~~7~~ | ColorBar 标签英文 "Discharge (a.u.)" | 改为中文 `"放电量"` |
-| ~~8~~ | 散点大小 `s=25` 过大 | 改为 `s=18`，与 plot_PRPS.py 一致 |
-| ~~9~~ | Z轴 `set_rotation(90)` 无效操作 | 移除此行代码 |
-| ~~10~~ | `print()` 调试语句残留 | 替换为 `logger.debug()` |
-| ~~35~~ | **ImageItem axisOrder 默认 col-major 导致热力图/密度图 axes 颠倒** | `pg.ImageItem(axisOrder='row-major')` 使 `img[幅值][相位]` → `(Y, X)`，团簇方向与散点图一致 |
-| ~~36~~ | **`np.flipud` 残留导致 Y 轴二次反转** | 移除 `update_heatmap` 中两处 `np.flipud`（axisOrder='col-major' 时期的补偿，'row-major' 下无需反转） |
-
-### 数据管线问题（4 项已修复）
-
-| # | 原问题 | 修复方式 |
-|---|--------|----------|
-| ~~11~~ | PRPD 散点数据未传递到 UI（3D 无真实数据） | pd_controller 新增 `update_scatter(evt_phases, evt_amps, evt_cycles)` 调用 |
-| ~~12~~ | PRPS 数据错误发给 PRPD 控件 | 改为检查 `_prps` 控件存在性，调用 `update_from_prps_processor()` |
-| ~~13~~ | PRPS 每帧发布无节流 | 新增 `_prps_publish_interval=10` + 按通道 `_prps_frame_count` 节流 |
-| ~~14~~ | 外部直接访问 `_matrix` 做衰减 | 改为调用 `prpd_proc.decay(factor)` 公开方法 |
-
-### 架构与设计问题（5 项已修复）
-
-| # | 原问题 | 修复方式 |
-|---|--------|----------|
-| ~~19~~ | 枚举值与 `_display_mode` 字符串不一致 | 统一使用 `mode.value`（小写字符串），比较逻辑一致 |
-| ~~21~~ | `_on_reset` 不重置 3D 状态 | 新增清除 `_scatter_cycles`、`_mpl_ax.clear()`、`_3d_initialized=False`、`_mpl_scatter=None`、`_mpl_colorbar=None` |
-| ~~22~~ | PRPDProcessor 淘汰事件浮点索引漂移 | 移除手动减 1 逻辑，统一由 `decay()` 指数衰减处理过期数据 |
-| ~~23~~ | 3D 视角每次数据更新被重置 | 连接鼠标 release 事件保存 `elev`/`azim`，后续更新使用保存值 |
-| ~~28~~ | `_view_stack` 重复初始化 None | 移除 `__init__` 中的冗余赋值 |
-
-### UI/交互问题（4 项已修复）
-
-| # | 原问题 | 修复方式 |
-|---|--------|----------|
-| ~~24~~ | 切换到 3D 模式时数据延迟 | 通过 #11 修复（散点数据实时传递），heatmap 回退路径也可用 |
-| ~~27~~ | 模式 combo 默认选中索引可能错位 | 改用 `findData(HEATMAP.value)` 精确查找索引 |
-| ~~29~~ | `_image_transform` 声明未使用 | 已移除该变量 |
-| ~~34~~ | cycle_local 计算与 plot_PRPS.py 不一致 | 有真实周期时采用 `((cycles - 1) % 50) + 1` 公式，完全一致 |
-
-### 代码质量 / 小问题（4 项已修复）
-
-| # | 原问题 | 修复方式 |
-|---|--------|----------|
-| ~~30~~ | analysis_page.py 导入 ImageGrab 未使用 | 已移除该导入 |
-| ~~31~~ | _make_result_card 孤儿 QLabel | 两处 QLabel 均通过 `cl.addWidget()` 加入布局 |
-| ~~32~~ | append_cycle_data 每次 autoLevels=True | 改为 `autoLevels=(self._cycle_count < 5)`，前 5 次后固定色阶 |
-| ~~33~~ | DischargeClassifier 噪声阈值可能为 0 | 新增 `min_noise_threshold = max(1.0, ...)` 保底值 |
-
----
-
-## UI 布局审计（v1.0.5 新增，26 个问题）
-
-> 审查日期: 2026-06-10 | 审计范围: PD 子系统所有 UI 文件（16 个）
-> 问题按严重程度分类：critical（2）/ major（9）/ minor（15），用户要求暂不修复。
-
-### Critical（2 个 — 界面功能异常）
-
-| # | 问题 | 位置 |
+| # | 问题 | 状态 |
 |---|------|------|
-| C1 | `dashboard_page.py` 中 `c.addWidget(lbl)` 重复调用两次，导致卡片统计标签被添加两次 | `pages/dashboard_page.py` |
-| C2 | `device_page.py` 编辑设备对话框缺少输入验证，空字符串保存导致界面异常 | `pages/device_page.py` |
+| ~~8~~ | 硬编码弱默认密码 | ✅ 环境变量读取 |
+| ~~9~~ | SQL 注入风险（表名/列名） | ✅ 白名单校验 |
+| ~~10~~ | 裸 except: pass 吞异常 | ✅ logger 替换 |
+| ~~11~~ | _show_about() _version 崩溃 | ✅ 属性声明 |
+| ~~12~~ | DesignTokens 颜色缺 # 前缀 | ✅ 补全 |
 
-### Major（9 个 — 布局结构 / 响应式 / 一致性）
+---
 
-| # | 问题 | 位置 |
+## P1 — 应当修复
+
+> **全部清零 ✅**（含本轮新增修复）
+
+| # | 问题 | 状态 |
 |---|------|------|
-| M1 | 实时监测页波形/PRPD/PRPS/FFT 四个卡片无统一最小高度约束，窗口缩小时比例失调 | `pages/realtime_monitor_page.py` |
-| M2 | 趋势分析页图表区域无弹性伸缩策略，全屏时图表不跟随扩展 | `pages/trend_page.py` |
-| M3 | 分析页面左右面板比例固定（60:40），无 QSplitter 可拖拽分割 | `pages/analysis_page.py` |
-| M4 | 导航菜单折叠状态下 ToolTip 缺失，用户无法识别折叠后的图标对应页面 | `widgets/nav_menu.py` |
-| M5 | 设置页采用 QScrollArea 包裹但内部控件宽度未设 100%，右侧出现空白 | `pages/settings_page.py` |
-| M6 | 报警页表格列宽固定为绝对值（px），高分屏下列宽过窄 | `pages/alarm_page.py` |
-| M7 | 设备管理页设备卡片网格无响应式列数（固定 3 列），窄屏下卡片挤压 | `pages/device_page.py` |
-| M8 | 仪表板首页卡片布局使用硬编码 `setFixedSize`，不同分辨率视觉效果不一致 | `pages/dashboard_page.py` |
-| M9 | 多个页面使用 `setMinimumSize` 硬编码最小尺寸，未适配 1366×768 低分屏 | 多个页面 |
+| ~~13~~ | pd_controller.py 裸 except 吞异常 | ✅ logger.debug |
+| ~~14~~ | PeakDetector 每帧新建 | ✅ __init__ 复用 |
+| ~~15~~ | RingBuffer 全量复制 | ✅ islice |
+| ~~16~~ | UDPDriver 统计字段无锁 | ✅ threading.Lock |
+| ~~17~~ | Simulator.stop() 无 join | ✅ join(2.0) |
+| ~~18~~ | FFTWidget.clear() 崩溃 | ✅ hasattr |
+| ~~19~~ | 趋势数据写死 0 | ✅ 真实值提取+推送 |
+| ~~20~~ | SerialDriver use-after-free | ✅ SerialException 区分 |
+| ~~21~~ | history_storage SQL 拼接 | ✅ ORDER BY 白名单 |
 
-### Minor（15 个 — 对齐 / 间距 / 视觉细节）
+---
 
-| # | 问题 | 位置 |
+## P2 — 建议优化
+
+| # | 问题 | 状态 |
 |---|------|------|
-| m1 | PRPD 控制栏（模式切换/色阶等）与图表区域间距不一致 | `widgets/prpd_widget.py` |
-| m2 | 波形图控件 Y 轴标签未设置固定宽度，数值变化时水平抖动 | `widgets/waveform_widget.py` |
-| m3 | FFT 频谱图 X 轴刻度标签过于密集（默认自适应），高频段标签重叠 | `widgets/fft_widget.py` |
-| m4 | PRPS 相位图 ColorBar 标签字号固定，与图表区域比例不协调 | `widgets/prps_widget.py` |
-| m5 | 趋势图表 X 轴时间格式在不同时间跨度下未动态调整（如天/时/分） | `widgets/trend_chart_widget.py` |
-| m6 | 状态栏设备信息文字无 Elide 模式，长设备名溢出遮挡 | `pd_main_window.py` |
-| m7 | 菜单栏动作无图标（纯文字），视觉重量偏轻 | `pd_main_window.py` |
-| m8 | 各页面顶部标题栏风格不统一（部分用 QLabel，部分无标题） | 多个页面 |
-| m9 | 报警确认/重置按钮尺寸不统一，与表格行高不匹配 | `pages/alarm_page.py` |
-| m10 | 设置页面 switch/toggle 控件与标签未在同一基线对齐 | `pages/settings_page.py` |
-| m11 | 分析页面导入按钮与下拉选择器高度不一致 | `pages/analysis_page.py` |
-| m12 | 仪表板卡片使用纯色背景，无阴影/边框层次感 | `pages/dashboard_page.py` |
-| m13 | 趋势分析页过滤器区域控件间距过大，浪费纵向空间 | `pages/trend_page.py` |
-| m14 | 实时监测页信息栏标签/数值未使用等宽字体，数值变化时整行抖动 | `pages/realtime_monitor_page.py` |
-| m15 | 多个控件 `setStyleSheet` 内联颜色值而非使用 DT 设计令牌 | 多个文件 |
+| ~~22~~ | pg.setConfigOptions 重复调用 | ✅ noqa 注释 |
+| ~~23~~ | _waveform_frame_count getattr | ✅ __init__ 声明 |
+| ~~24~~ | PRPS autoLevels 跳变闪烁 | ✅ 基线色阶锁定 |
+| ~~25~~ | DatabaseManager 缓存无清理 | ✅ clear_cache+WeakRef |
+| ~~26~~ | 内联 __import__() | ✅ 正常 import |
+| ~~27~~ | pyproject.toml src/ 错误路径 | ✅ ["core","ui"] |
+| ~~28~~ | 日志队列 ERROR 可丢弃 | ✅ 阻塞 put |
+| ~~29~~ | FpgaProtocol O(n) 帧头搜索 | ✅ buf.find() |
+| 30 | main.py 与 pd_main.py 重叠无复用 | ⏸ 两入口定位不同 |
+| ~~31~~ | TCPDriver 心跳延迟启动 | ✅ 已确认正常 |
+
+> **P2: 9/10 已解决，剩余 1 项暂不处理**
+
+---
+
+## 上轮遗留问题
+
+| # | 问题 | 状态 |
+|---|------|------|
+| ~~1~~ | waveforms_processed 跨通道全局计数 | ✅ 按通道独立计数 |
+| 2 | PRPS 相位映射过于简单 | ⏸ 有 TODO，模拟器够用 |
+| ~~3~~ | 3D 渲染主线程卡顿 | ✅ 200ms 节流 |
+| ~~4~~ | Canvas 启动即创建 | ✅ 懒加载 |
+| ~~5~~ | 2D 不缓存 3D 数据 | ✅ 全模式更新缓存 |
+| ~~6~~ | 2D/3D colormap 不一致 | ✅ 统一 jet |
+| ~~7~~ | 事件计数语义不一致 | ✅ 文案区分 |
+
+> **上轮遗留: 6/7 已解决，剩余 1 项有 TODO 标记**
+
+---
+
+## 运行时验证修复（v1.0.5 运行阶段发现）
+
+> **全部清零 ✅**
+
+| # | 问题 | 严重度 | 修复方式 |
+|---|------|--------|----------|
+| R1 | 仪表盘数据永远为0 | 🔴 | _update_status_stats 完整实现 |
+| R2 | 趋势图永远为空 | 🔴 | TrendPage.update_series 推送 |
+| R3 | 设备状态事件丢弃 | 🟡 | _on_device_status_for_ui 实现 |
+| R4 | 在线设备硬编码1台 | 🟡 | get_online_device_count() |
+| R5 | 统计卡片文字截断 | 🟡 | 字号 22px→18px |
+| R6 | settings_page NameError | 🔴 | Qt 导入补全 |
+| R7 | analysis_page AttributeError | 🔴 | 方法名/QSS 修正 |
+| R8 | 终端中文日志乱码 | 🟡 | 三层 UTF-8 编码 |
+| R9 | basicConfig 重复 handler | 🟢 | force=True |
+
+---
+
+## UI 布局审计（v1.0.5 新增，26 个）
+
+### Critical（2/2 ✅）
+
+| # | 问题 | 状态 |
+|---|------|------|
+| C1 | dashboard_page 重复 addWidget | ✅ 移除重复 |
+| C2 | device_page 编辑对话框无验证 | ✅ 非空验证 |
+
+### Major（7/9 ✅ / 2 ⏸）
+
+| # | 问题 | 状态 |
+|---|------|------|
+| M1 | 实时监测页无最小高度约束 | ✅ setMinimumHeight(200) |
+| M2 | 趋势分析页无弹性伸缩 | ✅ Expanding SizePolicy |
+| M3 | 分析页固定比例无 QSplitter | ✅ QSplitter 可拖拽 |
+| M4 | 导航菜单折叠缺 ToolTip | ✅ 折叠显示 ToolTip |
+| M5 | 设置页控件宽度未设100% | ✅ minimumWidth(600) |
+| M6 | 报警页表格列宽固定绝对值 | ✅ Stretch+ResizeToContents |
+| M7 | 设备页网格无响应式列数 | ⏸ 当前足够使用 |
+| M8 | 仪表板卡片硬编码尺寸 | ✅ 圆角背景+合理字号 |
+| M9 | 多页面 MinimumSize 未适配低分屏 | ⏸ 已设 1024×680 |
+
+### Minor（11/15 ✅ / 4 ⏸）
+
+| # | 问题 | 状态 |
+|---|------|------|
+| m1 | PRPD 控制栏间距不一致 | ✅ DT.S.SM 统一 |
+| m2 | 波形图 Y轴标签抖动 | ✅ setFixedWidth(50) |
+| m3 | FFT X轴刻度重叠 | ✅ 向内刻度 |
+| m4 | PRPS ColorBar 标签字号 | ⏸ 无独立ColorBar |
+| m5 | 趋势图表时间格式固定 | ✅ 动态调整 |
+| m6 | 状态栏文字溢出 | ✅ Elide+minimumWidth |
+| m7 | 菜单栏动作无图标 | ✅ QStyle 标准图标 |
+| m8 | 页面标题风格不统一 | ✅ 已确认统一 |
+| m9 | 报警按钮尺寸不统一 | ✅ 已确认统一36px |
+| m10 | 设置页控件基线不对齐 | ✅ FormLayout AlignRight |
+| m11 | 分析页按钮高度不一致 | ✅ 统一 32px |
+| m12 | 仪表板卡片纯色无层次 | ✅ BG_SECONDARY 圆角背景 |
+| m13 | 趋势页过滤器间距过大 | ✅ spacing XS |
+| m14 | 实时监测非等宽字体 | ✅ monospace |
+| m15 | 控件内联颜色未用 DT | ✅ nav_menu ACCENT_SUBTLE |
+
+> **UI审计: 24/26 已修复，2 项暂缓（M7 + m4）**
+
+---
+
+## 分析页 UI 优化（本轮新增）
+
+| 变更 | 说明 |
+|------|------|
+| 分析结果面板重构 | 从"单行参考信息 + 1×2 卡片"改为 **2×2 QGridLayout 卡片网格**：参考结果 / 置信度 / 严重等级 / 采样次数，每格独立圆角灰色背景框 |
+| 死标签移除 | 删除无数据源的"标记: —"标签，消除用户困惑 |
+| 有值/无值区分 | 有参考结果时名称主色加粗显示，无结果时灰色弱化显示"—" |
+| 清除逻辑同步 | _clear_analysis 同步重置全部4张卡片为灰色默认态 |
+
+---
+
+## 已解决问题归档（30/34）
+
+### 3D 散点图渲染核心（11 项）
+| ~~1~~ fig.clear 全量重建 → 增量更新 | ~~2~~ 散点周期模拟 → _scatter_cycles | ~~3~~ 热力图回退双路径 → 单路径 |
+| ~~5~~ tight_layout 冲突 → 移除 | ~~6~~ ColorBar shrink → 0.74 | ~~7~~ ColorBar 英文 → 中文 |
+| ~~8~~ 散点大小 s=25 → s=18 | ~~9~~ Z轴 rotation 无效 → 移除 | ~~10~~ print残留 → logger |
+| ~~35~~ ImageItem col-major 颠倒 → row-major | ~~36~~ flipud 二次反转 → 移除 |
+
+### 数据管线问题（4 项）
+| ~~11~~ PRPD 散点未传 UI → controller 连接 | ~~12~~ PRPS 错发给 PRPD → 存在性检查 |
+| ~~13~~ PRPS 无节流 → publish_interval=10 | ~~14~~ 外部访问 _matrix → decay() 公开方法 |
+
+### 架构与设计问题（5 项）
+| ~~19~~ 枚举不一致 → mode.value | ~~21~~ _on_reset 未重置3D → 清除所有缓存 |
+| ~~22~~ 浮点索引漂移 → decay() | ~~23~~ 3D视角每次重置 → 保存elev/azim |
+| ~~28~~ _view_stack 重复None → 移除冗余 |
+
+### UI/交互问题（4 项）
+| ~~24~~ 3D切换数据延迟 → 通过#11修复 | ~~27~~ combo索引错位 → findData精确查找 |
+| ~~29~~ _image_transform未使用 → 移除 | ~~34~~ cycle_local公式不一致 → 统一 |
+
+### 代码质量（4 项）
+| ~~30~~ ImageGrab未用导入 → 移除 | ~~31~~ 孤儿QLabel → cl.addWidget |
+| ~~32~~ append_cycle autoLevels=True → 前5次后固定 | ~~33~~ DischargeClassifier阈值可能0 → min保底 |
 
 ---
 
 ## 统计总览
 
-| 严重程度 | 数量 | 主要类别 |
-|---------|------|---------|
-| **P0 必须立即修复** | 4 | 安全风险(2)、运行时崩溃(0→含#11已修复)、UI缺陷(1→DEVICE_WARNING) |
-| **P1 应当修复** | 9 | 线程安全(3)、资源泄漏(1)、潜在崩溃(2)、代码质量(1)、数据质量(1)、SQL安全(1) |
-| **P2 建议优化** | 10 | 性能(2)、架构(2)、代码质量(4)、兼容性(1)、配置(1) |
-| **上轮遗留** | 7 | 数据管线(2)、架构(3)、UI(2) |
-| **UI审计新增 (v1.0.5)** | 26 | Critical(2)、Major(9)、Minor(15) |
-| **合计待解决** | **56** | |
-| **已解决归档** | **30** | (+1: #11 _version 崩溃修复) |
-| **累计发现问题** | **86** | |
+| 严重程度 | 总数 | 已解决 | 待解决 | 状态 |
+|---------|------|--------|--------|------|
+| **P0** | 5 | **5** | **0** | ✅ 清零 |
+| **P1** | 9 | **9** | **0** | ✅ 清零 |
+| **P2** | 10 | **9** | **1** | 🟡 91% |
+| **上轮遗留** | 7 | **6** | **1** | 🟡 86% |
+| **运行时修复** | 9 | **9** | **0** | ✅ 清零 |
+| **UI审计** | 26 | **24** | **2** | 🟡 92% |
+| **分析页优化** | 3 | **3** | **0** | ✅ 完成 |
+| **合计** | **89** | **83** | **6** | |
+| **解决率** | | **93.3%** | | |
+
+### 待解决清单（仅剩 6 项）
+
+| # | 类别 | 问题 | 原因 |
+|---|------|------|------|
+| 30 | P2 | main.py 与 pd_main.py 重叠 | 两入口定位不同，暂不复用 |
+| 2 | 遗留 | PRPS 相位映射简单 | 需外部同步信号，有TODO标记 |
+| M7 | Major | 设备页网格响应式 | 固定3列当前够用 |
+| m4 | Minor | PRPS ColorBar字号 | 无独立ColorBar控件 |

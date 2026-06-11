@@ -9,7 +9,7 @@
 | 系统 | 版本 | 入口 | 说明 |
 |------|------|------|------|
 | **MCGS 设备管理系统** | v2.1.0 | `main.py` | Modbus TCP/RTU 工业设备监控 |
-| **UHF 局放监测系统** | v1.0.5 | `pd_main.py` | 超高频局部放电在线监测 |
+| **UHF 局放监测系统** | v1.0.6 | `pd_main.py` | 超高频局部放电在线监测 |
 
 ---
 
@@ -157,7 +157,7 @@ python main.py
 
 基于 **PySide6 + PyQtGraph + NumPy** 的工业级超高频局部放电在线监测上位机软件。
 
-> **v1.0.5** — 关于对话框重构（Tab 式版本日志）、分类置信度优化（移除 0.85 硬上限）、冗余文档清理
+> **v1.0.6** — 程序图标标准化、关于对话框重构（Tab 式版本日志+更新日志独立窗口）、UI 布局全面审计（26 个问题清单）
 
 ## 核心特性
 
@@ -371,6 +371,13 @@ pytest tests/test_pd_integration.py -v
 
 ## PD 系统
 
+### v1.0.6 (2026-06-10)
+
+- **程序图标标准化**：`ems.png` 移至 `assets/icons/` 统一资源目录，使用相对路径 `QIcon("assets/icons/ems.png")` 设置窗口图标
+- **关于对话框重构**：从简单 QMessageBox 升级为带 Tab 的 QDialog，新增"更新日志"独立窗口（QTextEdit + HTML 渲染），CHANGELOG 结构化存储，支持 [新增]/[优化]/[修复] 标签颜色区分
+- **DT 常量修复**：`_show_about()` 中 `DT.C.ACCENT` → `DT.C.ACCENT_PRIMARY`、`DT.C.BORDER` → `DT.C.BORDER_DEFAULT`
+- **UI 布局全面审计**：审计 PD 子系统全部 16 个 UI 文件，识别 26 个布局问题（Critical 2 / Major 9 / Minor 15），归档至 `Update.md`
+
 ### v1.0.5 (2026-06-10)
 - **关于对话框重构**：从简单 QMessageBox 升级为带 Tab 的 QDialog，包含"关于"和"更新日志"两个标签页，支持版本历史浏览，当前版本蓝色高亮标记
 - **更新日志内嵌**：CHANGELOG 数据结构化存储在 PDMainWindow 中，支持新增/优化/修复三种标签颜色区分
@@ -435,4 +442,4 @@ MIT License
 
 ---
 
-**MCGS 系统**: v2.1.0 | **PD 系统**: v1.0.5 | **更新**: 2026-06-10
+**MCGS 系统**: v2.1.0 | **PD 系统**: v1.0.6 | **更新**: 2026-06-10
