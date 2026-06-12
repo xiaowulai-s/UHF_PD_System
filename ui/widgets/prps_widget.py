@@ -23,13 +23,13 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWi
 
 from ui.design_tokens import DT
 
-pg.setConfigOptions(antialias=True, foreground="#333333")
+pg.setConfigOptions(antialias=True, foreground=DT.C.CHART_FOREGROUND, background=DT.C.CHART_BACKGROUND)
 
 
 class PRPSWidget(QWidget):
     """PRPS 图谱控件"""
 
-    COLORMAP = "inferno"
+    COLORMAP = DT.C.CHART_COLORMAP
 
     def __init__(self, title: str = "PRPS 图谱", rows: int = 512, cols: int = 360, parent: Optional[QWidget] = None):
         super().__init__(parent)

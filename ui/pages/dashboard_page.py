@@ -11,7 +11,7 @@ from ui.design_tokens import DT
 try:
     import pyqtgraph as pg
 
-    pg.setConfigOptions(antialias=True, foreground="#333333")
+    pg.setConfigOptions(antialias=True, foreground=DT.C.CHART_FOREGROUND)
     HAS_PYQTGRAPH = True
 except ImportError:
     HAS_PYQTGRAPH = False
@@ -56,16 +56,8 @@ class DashboardPage(QWidget):
     def _build_metric_cards(self, layout: QVBoxLayout) -> None:
         frame = QFrame()
         frame.setObjectName("cardContainer")
-        frame.setStyleSheet(
-            f"""
-            QFrame#cardContainer {{
-                background: {DT.C.BG_PRIMARY};
-                border: 1px solid {DT.C.BORDER_DEFAULT};
-                border-radius: {DT.R.LG}px;
-            }}
-        """
-        )
-        frame.setFixedHeight(90)
+        frame.setStyleSheet(DT.sheet.sheet_card())
+        frame.setMinimumHeight(90)
         cards = QHBoxLayout(frame)
         cards.setContentsMargins(DT.S.LG, DT.S.MD, DT.S.LG, DT.S.MD)
 
@@ -74,6 +66,7 @@ class DashboardPage(QWidget):
             ("局放总数", "0 次", DT.C.ACCENT_PRIMARY),
             ("报警总数", "0", DT.C.STATUS_ERROR),
             ("今日最大幅值", "0.0 mV", DT.C.STATUS_WARNING),
+            ("AE Hits", "0", DT.C.ACCENT_SECONDARY),
         ]
         self._metric_labels = {}
         for name, value, color in metrics:
@@ -92,7 +85,6 @@ class DashboardPage(QWidget):
             lbl = QLabel(value)
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lbl.setStyleSheet(f"color: {color}; font-size: 22px; font-weight: 700;")
-            c.addWidget(lbl)
             c.addWidget(lbl)
             self._metric_labels[name] = lbl
             cards.addWidget(card, 1)
@@ -135,57 +127,17 @@ class DashboardPage(QWidget):
 
     def _make_mini_plot(self, title: str, parent: QLayout, stretch: int) -> pg.PlotWidget:
         """创建迷你曲线图（无交互控件）"""
-        frame = QFrame()
-        frame.setObjectName("cardContainer")
-        frame.setStyleSheet(
-            f"""
-            QFrame#cardContainer {{
-                background: {DT.C.BG_PRIMARY};
-                border: 1px solid {DT.C.BORDER_DEFAULT};
-                border-radius: {DT.R.LG}px;
-            }}
-        """
-        )
-        fl = QVBoxLayout(frame)
-        fl.setContentsMargins(DT.S.MD, DT.S.SM, DT.S.MD, DT.S.SM)
-
-        lbl = QLabel(title)
-        lbl.setStyleSheet(f"color: {DT.C.TEXT_TERTIARY}; font-size: 11px; font-weight: 600;")
-        fl.addWidget(lbl)
-
-        pw = pg.PlotWidget()
-        pw.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        pw.showGrid(x=True, y=True, alpha=0.15)
-        pw.setLabel("left", "", units="")
-        pw.setLabel("bottom", "", units="")
-        pw.getAxis("left").setStyle(showValues=False)
-        pw.getAxis("bottom").setStyle(showValues=False)
-        # 禁用交互
-        vb = pw.getViewBox()
-        vb.setMouseEnabled(False, False)
-        vb.enableAutoRange(axis="xy")
-        curve = pw.plot(pen=pg.mkPen(QColor(DT.C.ACCENT_PRIMARY), width=1))
-        fl.addWidget(pw)
-        parent.addWidget(frame, stretch)
-
-        # 存 curve 引用，不要存 pw — 存入一个简单结构
-        self._mini_curves = getattr(self, "_mini_curves", {})
-        self._mini_curves[title] = curve
-        return pw
+        return self._make_mini_card(title, parent, stretch, kind="plot")
 
     def _make_mini_image(self, title: str, parent: QLayout, stretch: int) -> pg.PlotWidget:
         """创建迷你热力图（无交互控件）"""
+        return self._make_mini_card(title, parent, stretch, kind="image")
+
+    def _make_mini_card(self, title: str, parent: QLayout, stretch: int, kind: str = "plot") -> pg.PlotWidget:
+        """通用迷你卡片工厂 (plot/image)"""
         frame = QFrame()
         frame.setObjectName("cardContainer")
-        frame.setStyleSheet(
-            f"""
-            QFrame#cardContainer {{
-                background: {DT.C.BG_PRIMARY};
-                border: 1px solid {DT.C.BORDER_DEFAULT};
-                border-radius: {DT.R.LG}px;
-            }}
-        """
-        )
+        frame.setStyleSheet(DT.sheet.sheet_card())
         fl = QVBoxLayout(frame)
         fl.setContentsMargins(DT.S.MD, DT.S.SM, DT.S.MD, DT.S.SM)
 
@@ -201,20 +153,23 @@ class DashboardPage(QWidget):
         pw.getAxis("bottom").setStyle(showValues=False)
         vb = pw.getViewBox()
         vb.setMouseEnabled(False, False)
-
-        img = pg.ImageItem()
-        pw.addItem(img)
-        cmap = pg.colormap.get("viridis")
-        if cmap:
-            img.setColorMap(cmap)
-        img.setImage(np.zeros((36, 32)))
+        if kind == "plot":
+            pw.showGrid(x=True, y=True, alpha=0.15)
+            curve = pw.plot(pen=pg.mkPen(QColor(DT.C.ACCENT_PRIMARY), width=1))
+            self._mini_curves = getattr(self, "_mini_curves", {})
+            self._mini_curves[title] = curve
+        else:
+            img = pg.ImageItem()
+            pw.addItem(img)
+            cmap = pg.colormap.get(DT.C.CHART_COLORMAP)
+            if cmap:
+                img.setColorMap(cmap)
+            img.setImage(np.zeros((36, 32)))
+            self._mini_images = getattr(self, "_mini_images", {})
+            self._mini_images[title] = img
 
         fl.addWidget(pw)
         parent.addWidget(frame, stretch)
-
-        # 存引用
-        self._mini_images = getattr(self, "_mini_images", {})
-        self._mini_images[title] = img
         return pw
 
     # ── 公开更新方法（供控制器调用） ──────────────────
@@ -269,7 +224,7 @@ class DashboardPage(QWidget):
             }}
         """
         )
-        alarm_frame.setFixedHeight(42)
+        alarm_frame.setMinimumHeight(42)
         alarm_layout = QHBoxLayout(alarm_frame)
         alarm_layout.setContentsMargins(DT.S.LG, DT.S.SM, DT.S.LG, DT.S.SM)
 

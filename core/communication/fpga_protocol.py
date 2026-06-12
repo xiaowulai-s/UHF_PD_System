@@ -17,6 +17,8 @@ FPGA 通信协议解析器
 0x04 = PRPD 数据 (PRPD_RESULT)
 0x05 = PRPS 数据 (PRPS_RESULT)
 0x06 = 设备状态 (DEVICE_STATUS)
+0x07 = AE 波形数据 (AE_WAVEFORM)
+0x08 = AE 参数数据 (AE_PARAMETERS)
 """
 
 from __future__ import annotations
@@ -45,6 +47,8 @@ DATA_TYPE_FFT_RESULT = 0x03
 DATA_TYPE_PRPD_RESULT = 0x04
 DATA_TYPE_PRPS_RESULT = 0x05
 DATA_TYPE_DEVICE_STATUS = 0x06
+DATA_TYPE_AE_WAVEFORM = 0x07
+DATA_TYPE_AE_PARAMETERS = 0x08
 
 
 class DataType(IntEnum):
@@ -56,6 +60,8 @@ class DataType(IntEnum):
     PRPD_RESULT = DATA_TYPE_PRPD_RESULT
     PRPS_RESULT = DATA_TYPE_PRPS_RESULT
     DEVICE_STATUS = DATA_TYPE_DEVICE_STATUS
+    AE_WAVEFORM = DATA_TYPE_AE_WAVEFORM
+    AE_PARAMETERS = DATA_TYPE_AE_PARAMETERS
 
 
 DATA_TYPE_NAMES = {
@@ -65,6 +71,8 @@ DATA_TYPE_NAMES = {
     DATA_TYPE_PRPD_RESULT: "PRPD 图谱",
     DATA_TYPE_PRPS_RESULT: "PRPS 图谱",
     DATA_TYPE_DEVICE_STATUS: "设备状态",
+    DATA_TYPE_AE_WAVEFORM: "AE 波形数据",
+    DATA_TYPE_AE_PARAMETERS: "AE 参数数据",
 }
 
 # 最小帧长度: 帧头(2) + 长度(2) + 设备ID(2) + 通道ID(2) + 时间戳(8) + 类型(1) + CRC(2) = 19
@@ -151,6 +159,30 @@ class DeviceStatusData:
     uptime: int = 0  # 运行时间 (s)
     error_code: int = 0  # 错误码
     error_message: str = ""  # 错误信息
+
+
+@dataclass
+class AEWaveformData:
+    """AE 波形数据"""
+
+    samples: List[float]  # 采样点幅值 (mV)
+    sample_rate: int  # 采样率 (Hz)
+    trigger_position: int = 0  # 触发点位置
+
+
+@dataclass
+class AEParametersData:
+    """AE 参数数据（预计算的 AE 特征）"""
+
+    peak_amplitude: float = 0.0  # 峰值幅值 (mV)
+    rise_time_us: float = 0.0  # 上升时间 (us)
+    duration_us: float = 0.0  # 持续时间 (us)
+    counts: int = 0  # 振铃计数
+    marse_energy: float = 0.0  # MARSE 能量
+    rms: float = 0.0  # RMS 值 (mV)
+    arrival_time: float = 0.0  # 到达时间 (s)
+    phase_deg: float = 0.0  # 工频相位 (0-360)
+    avg_frequency_khz: float = 0.0  # 平均频率 (kHz)
 
 
 # ═══════════════════════════════════════════════════════
@@ -310,6 +342,10 @@ class FpgaProtocol:
             return self._parse_prps_result(payload)
         elif data_type == DATA_TYPE_DEVICE_STATUS:
             return self._parse_device_status(payload)
+        elif data_type == DATA_TYPE_AE_WAVEFORM:
+            return self._parse_ae_waveform(payload)
+        elif data_type == DATA_TYPE_AE_PARAMETERS:
+            return self._parse_ae_parameters(payload)
         else:
             logger.debug("未知数据类型: 0x%02X, 长度=%d", data_type, len(payload))
             return payload  # 返回原始字节
@@ -446,6 +482,40 @@ class FpgaProtocol:
         if len(payload) >= 46:
             result.error_code = struct.unpack_from(">I", payload, 42)[0]
 
+        return result
+
+    def _parse_ae_waveform(self, payload: bytes) -> AEWaveformData:
+        """解析 AE 波形数据"""
+        # 前 8 字节: 采样率 (4B) + 触发位置 (4B)
+        sample_rate = struct.unpack_from(">I", payload, 0)[0]
+        trigger_pos = struct.unpack_from(">I", payload, 4)[0]
+
+        # 剩余: int16 采样点
+        sample_bytes = payload[8:]
+        n_samples = len(sample_bytes) // 2
+        samples = list(struct.unpack_from(f">{n_samples}h", sample_bytes, 0)) if n_samples > 0 else []
+
+        return AEWaveformData(
+            samples=samples,
+            sample_rate=sample_rate,
+            trigger_position=trigger_pos,
+        )
+
+    def _parse_ae_parameters(self, payload: bytes) -> AEParametersData:
+        """解析 AE 参数数据"""
+        # 固定 32 字节: 峰值幅值(4B) + 上升时间(4B) + 持续时间(4B) + 振铃计数(2B)
+        #           + MARSE(4B) + RMS(4B) + 到达时间(4B) + 相位(4B) + 平均频率(2B)
+        result = AEParametersData()
+        if len(payload) >= 32:
+            result.peak_amplitude = struct.unpack_from(">f", payload, 0)[0]
+            result.rise_time_us = struct.unpack_from(">f", payload, 4)[0]
+            result.duration_us = struct.unpack_from(">f", payload, 8)[0]
+            result.counts = struct.unpack_from(">H", payload, 12)[0]
+            result.marse_energy = struct.unpack_from(">f", payload, 14)[0]
+            result.rms = struct.unpack_from(">f", payload, 18)[0]
+            result.arrival_time = struct.unpack_from(">f", payload, 22)[0]
+            result.phase_deg = struct.unpack_from(">f", payload, 26)[0]
+            result.avg_frequency_khz = struct.unpack_from(">f", payload, 30)[0]
         return result
 
     # ── 封装 ─────────────────────────────────────────

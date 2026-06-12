@@ -1,152 +1,14 @@
-# 工业设备监控与局放监测系统
+# 超高频超声波局部放电检测系统
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![PySide6](https://img.shields.io/badge/PySide6-6.6%2B-green.svg)](https://pypi.org/project/PySide6/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-本工程包含两套独立的工业上位机系统，共用同一套 UI 组件库和基础架构：
+超高频局部放电在线监测上位机软件，支持 UHF 超高频 + AE 超声波双模态局放检测与声源定位。
 
 | 系统 | 版本 | 入口 | 说明 |
 |------|------|------|------|
-| **MCGS 设备管理系统** | v2.1.0 | `main.py` | Modbus TCP/RTU 工业设备监控 |
-| **UHF 局放监测系统** | v1.0.6 | `pd_main.py` | 超高频局部放电在线监测 |
-
----
-
-# MCGS 设备管理系统 (Equipment Management System)
-
-[![MCGS](https://img.shields.io/badge/MCGS-Modbus_TCP-integrationred.svg)](MCGS.md)
-
-基于 **PySide6** 和 **Modbus 协议** 的工业设备上位机监控软件，采用 **四层解耦 + 服务化架构**，支持 **MCGS 触摸屏集成**、多设备并发管理、实时数据可视化和智能故障恢复。
-
-> **v2.1.0** — 日志系统重构 (structlog 中文完美显示)、编码安全加固、连接失败日志去重、PBKDF2 密码升级、冗余文件清理
-
-## 核心特性
-
-### Modbus 通信
-
-| 特性 | 说明 |
-|------|------|
-| **Modbus TCP** | 上位机作为 Client，MCGS 触摸屏作为 Server（Slave），端口 502 |
-| **Modbus RTU** | 串口通信（RS485/RS232），TOCTOU 安全读取，CRC-16 校验 |
-| **Modbus ASCII** | ASCII 编码串口通信，LRC 校验 |
-| **批量寄存器读取** | 单次请求读取全部变量，高性能低延迟 |
-| **4 种字节序** | ABCD（大端）/ BADC / CDAB / DCBA |
-| **7 种数据类型** | uint16 / int16 / uint32 / int32 / float32 / bool / coil |
-
-### 设备管理
-
-- 多设备并发管理（支持 100+ 设备、20000+ 寄存器）
-- 设备增删改查 + 搜索 + 批量操作
-- JSON 配置持久化，端口信息完整保存
-- 可配置自动重连（全局/设备级控制）
-- 设备分组管理与分组轮询
-- 设备模板管理（快速创建/克隆设备）
-- 配置导入/导出（含版本兼容性检查）
-- 协议插件注册表（运行时扩展新协议）
-
-### 智能故障恢复
-
-- **FaultRecoveryService** — 多模式故障恢复（指数退避 / 固定间隔 / 即时重试）
-- 随机抖动防惊群（Jitter）
-- 故障检测与诊断
-- 恢复状态查询与统计分析
-
-### 通信驱动
-
-- **TCPDriver** — FC08 Modbus 诊断心跳（10s 间隔），TCP KeepAlive（10s/5s/3次），线程安全
-- **SerialDriver** — TOCTOU 安全读取，混合/阻塞/非阻塞三种模式，自适应波特率超时
-- **BaseDriver** — QMutex 缓冲区保护，统一信号接口
-
-### 数据可视化
-
-- **DataCard** — 数据卡片，实时值 + 状态 + 趋势
-- **Gauge** — Canvas 仪表盘，弧形进度条
-- **RealTimeChart** — pyqtgraph 高性能实时曲线图
-- **DynamicMonitorPanel** — 动态监控面板，支持卡片布局自由编排
-- **HistoryChartWidget** — 历史数据趋势图
-
-### 报警系统
-
-- 四级报警：信息 / 警告 / 错误 / 严重
-- 四类阈值：高高(HH) / 高(H) / 低(L) / 低低(LL)
-- 死区控制 + 冷却机制，防止报警风暴
-- 8 种错误智能分类
-- 报警确认 + 历史记录 + 统计分析
-
-### UI 组件库
-
-- **按钮系统**：PrimaryButton / SecondaryButton / SuccessButton / DangerButton / GhostButton
-- **输入控件**：LineEdit / ComboBox / InputWithLabel / Checkbox
-- **卡片组件**：DataCard / InfoCard / ActionCard
-- **表格组件**：DeviceTree / DataTable / DeviceTable
-- **状态组件**：StatusBadge / AnimatedStatusBadge
-- **主题管理**：ThemeManager（Fluent Design 风格浅色主题）+ DesignTokens 设计令牌系统
-- **动画调度**：AnimationScheduler（全局单定时器，CPU 占用降低 80%+）
-
-## MCGS 系统架构
-
-```
-UI 层 (PySide6 Widgets)
-    MainWindow + Controllers + Panels + Dialogs
-    ├─ MCGSController (MCGS触摸屏通信)
-    └─ MonitorPageController (监控页)
-        ↓
-设备管理层 (DeviceManagerFacade v4.0)
-    Registry + Scheduler + Recovery + Configuration
-    GroupManager + Lifecycle + DataPersistence
-        ↓
-通信驱动层
-    TCPDriver / SerialDriver / BaseDriver
-        ↓
-协议层 (Modbus Protocol)
-    TCP + RTU + ASCII + CRC-16 / LRC
-    ByteOrderConfig + ProtocolRegistry
-        ↓
-数据总线 (DataBus v2.0) — 发布/订阅模式
-        ↓
-数据持久化层 (SQLite WAL)
-    DatabaseManager + Repository + Services
-    7 ORM Models + 5 Repositories
-```
-
-## 项目结构
-
-```
-├── main.py                     # MCGS 系统入口
-├── config.json                 # MCGS 系统配置
-├── config/devices.json         # MCGS 设备配置
-├── core/
-│   ├── communication/          # TCP/串口驱动
-│   ├── protocols/              # Modbus 协议栈
-│   ├── device/                 # 设备管理层 (v4.0)
-│   │   ├── device_manager_facade.py
-│   │   ├── polling_scheduler.py
-│   │   ├── fault_recovery_service.py
-│   │   └── ...
-│   ├── engine/                 # 网关引擎
-│   ├── data/                   # 数据库模型 + Repository
-│   ├── services/               # MCGS 业务服务
-│   ├── foundation/             # DataBus 事件总线
-│   ├── plugins/                # 协议插件
-│   └── utils/                  # 报警/权限/日志/导出
-├── ui/
-│   ├── main_window.py          # MCGS 主窗口
-│   ├── controllers/            # 页面控制器
-│   ├── dialogs/                # MCGS 配置对话框
-│   ├── widgets/                # 组件库
-│   └── panels/                 # 监控面板
-└── tests/
-```
-
-## 安装与运行
-
-```bash
-pip install -e .
-
-# 运行 MCGS 系统
-python main.py
-```
+| **UHF 局放监测系统** | v1.0.7 | `pd_main.py` | 超高频局部放电在线监测 |
 
 ---
 
@@ -157,7 +19,7 @@ python main.py
 
 基于 **PySide6 + PyQtGraph + NumPy** 的工业级超高频局部放电在线监测上位机软件。
 
-> **v1.0.6** — 程序图标标准化、关于对话框重构（Tab 式版本日志+更新日志独立窗口）、UI 布局全面审计（26 个问题清单）
+> **v1.0.7** — MCGS 系统全量移除、UI 配色统一优化、样式代码去重、双模态通道切换
 
 ## 核心特性
 
@@ -165,28 +27,29 @@ python main.py
 
 | 模块 | 功能 | 性能 |
 |------|------|------|
-| **实时波形** | 缩放/拖拽/游标测量/自动量程/触发标记 | ≥20 FPS |
-| **PRPD 图谱** | 散点图/热力图/密度图三种模式、相位分布分析 | ≥10 FPS |
-| **FFT 频谱** | 峰值检测(含谐波识别)、频段统计(UHF四频段)、噪声估计、SNR | ≥10 FPS |
-| **PRPS 图谱** | 3D 散点图（Matplotlib）、512×360 周期脉冲序列、完整坐标轴+ColorBar | 实时 |
+| **实时波形** | 缩放/拖拽/游标测量/自动量程/触发标记 | >=20 FPS |
+| **PRPD 图谱** | 散点图/热力图/密度图三种模式、相位分布分析 | >=10 FPS |
+| **FFT 频谱** | 峰值检测(含谐波识别)、频段统计、噪声估计、SNR | >=10 FPS |
+| **PRPS 图谱** | 3D 散点图（Matplotlib）、512x360 周期脉冲序列 | 实时 |
 | **趋势分析** | 1h/24h/7d/30d 多时间维度、多指标叠加 | 实时 |
+| **AE 声发射** | Hilbert 包络提取、hit 检测、参数提取、TDOA 声源定位 | 实时 |
 
 ### 报警管理
 
-- **三级报警体系**：严重(≥80%) / 一般(≥50%) / 提示(≥30%)
+- **三级报警体系**：严重(>=80%) / 一般(>=50%) / 提示(>=30%)
 - **六种报警类型**：局放超限 / 设备离线 / 光模块异常 / ADC异常 / 同步异常 / 存储不足
 - **防抖机制**：连续 N 次触发确认报警，消除误报
-- 报警事件列表 + 统计 + 规则配置 + 确认
+- 报警事件列表 + 统计 + 规则配置 + 确认弹窗
 - 报警持久化到 SQLite 数据库
 
 ### FPGA 通信协议
 
 ```
 数据帧格式:
-┌──────┬──────┬────────┬────────┬──────────┬────────┬──────────┬──────┐
-│ 帧头 │ 长度 │ 设备ID │ 通道ID │ 时间戳   │数据类型│ 数据内容 │ CRC  │
-│ 2Byte│ 2Byte│ 2Byte  │ 2Byte  │ 8Byte    │ 1Byte  │ N Byte   │ 2Byte│
-└──────┴──────┴────────┴────────┴──────────┴────────┴──────────┴──────┘
++------+------+--------+--------+----------+--------+----------+------+
+| 帧头 | 长度 | 设备ID | 通道ID | 时间戳   |数据类型| 数据内容 | CRC  |
+| 2Byte| 2Byte| 2Byte  | 2Byte  | 8Byte    | 1Byte  | N Byte   | 2Byte|
++------+------+--------+--------+----------+--------+----------+------+
 
 数据类型:
 0x01 WAVEFORM    波形数据      TCP 端口 5000: 控制通道
@@ -195,17 +58,20 @@ python main.py
 0x04 PRPD_RESULT PRPD 图谱
 0x05 PRPS_RESULT PRPS 图谱
 0x06 DEVICE_STATUS 设备状态
+0x07 AE_WAVEFORM  AE 波形数据
+0x08 AE_PARAMETERS AE 参数数据
 ```
 
 ### 数据处理 Pipeline
 
 ```
-UDP 接收 → FpgaProtocol.feed() → 波形数据
-                                    ↓
-                          ┌─ 峰值检测 → DataBus(PD事件)
-                          ├─ FFT计算  → DataBus(FFT)
-                          ├─ PRPD更新 → DataBus(PRPD)  (指数衰减)
-                          └─ PRPS更新 → DataBus(PRPS)
+UDP 接收 -> FpgaProtocol.feed() -> 波形数据
+                                       |
+                             +- 峰值检测 -> DataBus(PD事件)
+                             +- FFT计算  -> DataBus(FFT)
+                             +- PRPD更新 -> DataBus(PRPD)
+                             +- PRPS更新 -> DataBus(PRPS)
+                             +- AE包络   -> DataBus(AE)
 ```
 
 ### 信号处理算法
@@ -213,57 +79,60 @@ UDP 接收 → FpgaProtocol.feed() → 波形数据
 | 模块 | 算法 | 说明 |
 |------|------|------|
 | **FFTProcessor** | numpy.rfft + scipy.signal.find_peaks | 频谱计算、峰值检测、频段统计、SNR |
-| **PRPDProcessor** | 360×256 相位-幅值矩阵 | 散点/热力/密度、指数衰减、统计特征 |
-| **PRPSProcessor** | 512×360 滚动矩阵 | 周期脉冲序列、滑动平均 PRPD |
-| **PeakDetector** | scipy 自适应阈值 / 简化模式 | 脉冲参数(幅值/宽度/面积/能量/SNR) |
+| **PRPDProcessor** | 360x256 相位-幅值矩阵 | 散点/热力/密度、指数衰减、统计特征 |
+| **PRPSProcessor** | 512x360 滚动矩阵 | 周期脉冲序列、滑动平均 PRPD |
+| **PeakDetector** | scipy 自适应阈值 | 脉冲参数(幅值/宽度/面积/能量/SNR) |
 | **RingBuffer** | collections.deque | 1,000,000 点线程安全环形缓冲 |
+| **AEEnvelopeProcessor** | 带通滤波 + Hilbert | AE 包络提取 (20-200kHz) |
+| **AEPeakDetector** | 相对阈值 hit 检测 | AE 到达时间、峰值幅值 |
+| **AEParameterExtractor** | 时域/频域特征 | 上升时间、持续时间、振铃计数、MARSE |
 
 ### 模拟器（无需 FPGA）
 
 内置四种局放类型的波形模拟器，支持可调参数：
 
 ```bash
-# 电晕放电 (270°~330° 负半周集中)
+# 电晕放电 (270-330 负半周集中)
 python pd_main.py --simulator --pd-type corona
 
-# 沿面放电 (30°~90° 正半周集中)
+# 沿面放电 (30-90 正半周集中)
 python pd_main.py --simulator --pd-type surface
 
-# 内部放电 (0°~60° 正半周初期)
+# 内部放电 (0-60 正半周初期)
 python pd_main.py --simulator --pd-type internal
 
-# 悬浮放电 (0°~360° 全相位分布)
+# 悬浮放电 (0-360 全相位分布)
 python pd_main.py --simulator --pd-type floating
 ```
 
 ### 系统架构
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  UI 层 (PySide6)                  │
-│  ┌──────────┬──────────┬──────────┬──────────┐   │
-│  │ 仪表板   │ 实时监测  │ 趋势分析  │ 报警管理  │   │
-│  ├──────────┼──────────┼──────────┼──────────┤   │
-│  │ 设备管理  │ 系统设置  │          │          │   │
-│  └──────────┴──────────┴──────────┴──────────┘   │
-├─────────────────────────────────────────────────┤
-│               控制器层 (Coordinator)              │
-│          PDSystemController                      │
-│    ┌──────────────────────────────────────┐      │
-│    │          PDDataBus 事件总线           │      │
-│    └──────────────────────────────────────┘      │
-├─────────────────────────────────────────────────┤
-│              服务层 (Services)                    │
-│  AcquisitionService  PDAlarmService              │
-│  PDStorageService                                │
-├─────────────────────────────────────────────────┤
-│              通信层 (Communication)               │
-│  FpgaProtocol  UDPDriver  TCPDriver              │
-├─────────────────────────────────────────────────┤
-│              信号处理 (Processing)                │
-│  RingBuffer  FFTProcessor  PRPDProcessor         │
-│  PRPSProcessor  PeakDetector                     │
-└─────────────────────────────────────────────────┘
++---------------------------------------------------+
+|                  UI 层 (PySide6)                    |
+|  +---------+----------+----------+----------+      |
+|  | 仪表板  | 实时监测  | 趋势分析  | 报警管理  |      |
+|  +---------+----------+----------+----------+      |
+|  | 设备管理 | 系统设置  | 数据分析  | AE分析   |      |
+|  +---------+----------+----------+----------+      |
++---------------------------------------------------+
+|               控制器层 (PDSystemController)          |
+|    +----------------------------------------+       |
+|    |          PDDataBus 事件总线             |       |
+|    +----------------------------------------+       |
++---------------------------------------------------+
+|              服务层 (Services)                      |
+|  AcquisitionService  PDAlarmService                |
+|  PDStorageService                                   |
++---------------------------------------------------+
+|              通信层 (Communication)                  |
+|  FpgaProtocol  UDPDriver  HardwareManager           |
++---------------------------------------------------+
+|              信号处理 (Processing)                   |
+|  RingBuffer  FFTProcessor  PRPDProcessor            |
+|  PRPSProcessor  PeakDetector                        |
+|  AEEnvelopeProcessor  AEPeakDetector  AEParameterExtractor |
++---------------------------------------------------+
 ```
 
 ### 项目结构
@@ -273,37 +142,52 @@ python pd_main.py --simulator --pd-type floating
 ├── pd_build.spec                  # PyInstaller 打包配置
 ├── core/
 │   ├── processing/                # 信号处理核心
-│   │   ├── fft_processor.py       # FFT 频谱分析
-│   │   ├── prpd_processor.py      # PRPD 图谱
-│   │   ├── prps_processor.py      # PRPS 图谱
-│   │   ├── peak_detector.py       # 峰值检测
-│   │   └── ring_buffer.py         # 环形缓冲区
+│   │   ├── fft_processor.py
+│   │   ├── prpd_processor.py
+│   │   ├── prps_processor.py
+│   │   ├── peak_detector.py
+│   │   ├── ring_buffer.py
+│   │   ├── ae_envelope.py
+│   │   ├── ae_peak_detector.py
+│   │   └── ae_parameter_extractor.py
 │   ├── communication/             # FPGA 通信
-│   │   ├── fpga_protocol.py       # 协议解析器
-│   │   └── udp_driver.py          # UDP 数据通道
+│   │   ├── fpga_protocol.py
+│   │   ├── udp_driver.py
+│   │   ├── hardware_manager.py
+│   │   └── hardware_config.py
 │   ├── services/                  # PD 业务服务
-│   │   ├── pd_acquisition_service.py  # 采集服务
-│   │   ├── pd_alarm_service.py       # 报警服务
-│   │   └── pd_storage_service.py     # 存储服务
+│   │   ├── pd_acquisition_service.py
+│   │   ├── pd_alarm_service.py
+│   │   └── pd_storage_service.py
 │   ├── data/pd_models.py          # PD 数据库模型
-│   └── foundation/pd_data_bus.py  # PD 事件总线
+│   └── foundation/                # 基础设施
+│       ├── pd_data_bus.py
+│       ├── data_bus.py
+│       └── sensor_types.py
 ├── ui/
 │   ├── pd_main_window.py          # PD 主窗口
 │   ├── pd_controller.py           # 系统总控制器
-│   ├── pages/                     # 6 个功能页面
-│   │   ├── dashboard_page.py      # 系统仪表板
-│   │   ├── realtime_monitor_page.py # 实时监测
-│   │   ├── trend_page.py          # 趋势分析
-│   │   ├── alarm_page.py          # 报警管理
-│   │   ├── device_page.py         # 设备管理
-│   │   └── settings_page.py       # 系统设置
+│   ├── design_tokens.py           # Fluent Design 设计令牌
+│   ├── theme_manager.py           # 主题管理器
+│   ├── pages/                     # 8 个功能页面
+│   │   ├── dashboard_page.py
+│   │   ├── realtime_monitor_page.py
+│   │   ├── analysis_page.py
+│   │   ├── trend_page.py
+│   │   ├── alarm_page.py
+│   │   ├── device_page.py
+│   │   ├── settings_page.py
+│   │   └── ae_page.py
 │   └── widgets/                   # 分析控件
-│       ├── waveform_widget.py     # 实时波形控件
-│       ├── prpd_widget.py         # PRPD 图谱控件
-│       ├── prps_widget.py         # PRPS 图谱控件
-│       ├── fft_widget.py          # FFT 频谱控件
-│       └── trend_chart_widget.py  # 趋势曲线控件
-├── config/pd_default_config.json  # PD 系统配置
+│       ├── waveform_widget.py
+│       ├── prpd_widget.py
+│       ├── prps_widget.py
+│       ├── fft_widget.py
+│       ├── trend_chart_widget.py
+│       ├── ae_parameters_widget.py
+│       ├── ae_scatter_widget.py
+│       └── ae_localization_widget.py
+├── config/pd_default_config.json
 └── tests/test_pd_integration.py   # 25 个集成测试
 ```
 
@@ -325,9 +209,7 @@ python pd_main.py --simulator
 
 ---
 
-# 共同基础架构
-
-## 设计令牌系统 (DesignTokens)
+## 设计令牌系统
 
 Fluent Design 风格统一 UI 规范：
 
@@ -343,17 +225,13 @@ Fluent Design 风格统一 UI 规范：
 
 ## 数据库
 
-| 系统 | 数据库 | 表数量 | ORM |
-|------|--------|--------|-----|
-| MCGS | `data/equipment_management.db` | 7 表 | SQLAlchemy |
-| PD | `data/pd_monitor.db` | 5 表 | SQLAlchemy |
+| 数据库 | 表数量 | ORM |
+|--------|--------|-----|
+| `data/pd_monitor.db` | 5 表 | SQLAlchemy |
 
 ## 测试
 
 ```bash
-# MCGS 测试
-pytest tests/ -v
-
 # PD 集成测试（25 个用例）
 pytest tests/test_pd_integration.py -v
 ```
@@ -362,77 +240,49 @@ pytest tests/test_pd_integration.py -v
 
 # 版本历史
 
-## MCGS 系统
-
-### v2.1.0 (2026-05-19)
-- 日志系统重构 (structlog 中文完美显示)
-- 编码安全加固、连接失败日志去重
-- PBKDF2 密码升级、冗余文件清理
-
 ## PD 系统
 
-### v1.0.6 (2026-06-10)
+### v1.0.7 (2026-06-12)
+- **MCGS 系统全量移除**：删除 30+ 个 MCGS 独占文件（Modbus 协议栈、TCP/串口驱动、MCGS 服务与工具、历史数据模块），5 个 `__init__.py` 导出清理
+- **README 重构**：移除双系统描述与 MCGS 完整章节，仅保留 PD 系统文档
+- **UI 配色统一**：全工程 Material Blue → Fluent Blue #0969DA（QSS 9 处 + 设计令牌统一）
+- **样式代码去重**：新增 DT.sheet.card/table/combo/spin/input 5 个工厂方法，6 个页面统一引用
+- **Dashboard 自适应**：指标卡片 fixedHeight → minimumHeight，合并迷你图表工厂函数
+- **AlarmPage 优化**：批量插入延迟刷新、清除确认弹窗、QButtonGroup 互斥管理
+- **DevicePage 修复**：左侧 stretch 0→1、删除确认弹窗、耦合类型动态循环
 
-- **程序图标标准化**：`ems.png` 移至 `assets/icons/` 统一资源目录，使用相对路径 `QIcon("assets/icons/ems.png")` 设置窗口图标
-- **关于对话框重构**：从简单 QMessageBox 升级为带 Tab 的 QDialog，新增"更新日志"独立窗口（QTextEdit + HTML 渲染），CHANGELOG 结构化存储，支持 [新增]/[优化]/[修复] 标签颜色区分
-- **DT 常量修复**：`_show_about()` 中 `DT.C.ACCENT` → `DT.C.ACCENT_PRIMARY`、`DT.C.BORDER` → `DT.C.BORDER_DEFAULT`
-- **UI 布局全面审计**：审计 PD 子系统全部 16 个 UI 文件，识别 26 个布局问题（Critical 2 / Major 9 / Minor 15），归档至 `Update.md`
+### v1.0.6 (2026-06-11)
+- **AE 声发射子系统集成**：新增 AE 协议数据类型（0x07/0x08），完整 AE 信号处理管线（Hilbert 包络 → hit 检测 → 参数提取 → PRPD/PRPS/FFT）
+- **双模态通道切换**：AcquisitionService 自动识别 UHF/AE 耦合类型
+- **AE 特征分析页**：散点图/趋势图/TDOA 声源定位
+- **AnalysisPage 子包化**：创建 ui/pages/analysis/ 子包，向后兼容导入
+- 程序图标标准化、关于对话框 Tab 式重构（QButtonGroup）、UI 布局全面审计（26 项）
 
 ### v1.0.5 (2026-06-10)
-- **关于对话框重构**：从简单 QMessageBox 升级为带 Tab 的 QDialog，包含"关于"和"更新日志"两个标签页，支持版本历史浏览，当前版本蓝色高亮标记
-- **更新日志内嵌**：CHANGELOG 数据结构化存储在 PDMainWindow 中，支持新增/优化/修复三种标签颜色区分
-- **分类置信度优化**：移除 0.85 硬性置信度上限，改为直接使用最高占比类型的投票率作为置信度，更真实反映分类结果
-- **冗余文档清理**：删除 CHANGELOG.md、docs/ 下 16 个旧文档、issue_list.md、plot_PRPS.py、config/devices.json.bak 等，减少 12000+ 行冗余内容
+- 关于对话框重构：从 QMessageBox 升级为 Tab 式 QDialog
+- 分类置信度优化：移除 0.85 硬上限
+- 冗余文档清理：删除 CHANGELOG.md 及 16 个旧文档，减少 12000+ 行
 
 ### v1.0.4 (2026-06-10)
-- **放电类型分类策略重设计**：从规则引擎切换为 Profile Matching（参考剖面匹配），使用 8 维特征向量 + 加权高斯核相似度 + Softmax 归一化，四组真实实验数据验证全部正确（电晕/悬浮颗粒/内部气隙/沿面）
-- **新增幅值分布特征**：变异系数(CV)、双峰性(bimodality)、正半周能量比(pos_energy)，增强类型区分能力
-- **核心区分特征**：`pos_energy` 区分电晕(负半周占优) vs 悬浮(均衡)；`s1_s4_ratio` 区分内部气隙(S1>S4) vs 沿面(S1≈S4)；`cv` 区分悬浮(极高) vs 其他
-- **分析结果面板重构**：参考结果卡片 + 类型统计表（出现次数/占比/说明）+ 幅值统计表（总数/max/min/avg/median/P90），标记为"参考结果"
-- **Bootstrap 多次采样统计**：50 次有放回采样，各类型出现次数和占比，置信度上限 0.85
-- **随机噪声(noise)识别**：纯噪声拒判 + UI 灰色显示"随机噪声"
-- **分析页面布局优化**：幅值分布宽度与 PRPD 一致，分析结果高度扩展至幅值分布底部
-- **DataImporter 解包修复**：`load()` 返回 5 值(fmt,phases,amps,cycles,meta)，修复 `_import_file()` 缺少 cycles 的 ValueError
-- **统一分类路径**：移除 `classify_by_cycles()`（实际周期分组事件太少不稳定），统一使用 Bootstrap `classify_cycles()`
+- 放电类型分类策略重设计：Profile Matching + 8 维特征 + 高斯核相似度 + Softmax
+- 新增幅值分布特征、Bootstrap 50 次采样统计、随机噪声识别
 
 ### v1.0.3 (2026-06-09)
-- **热力图/密度图团簇方向修复**：改用手动构建2D直方图（`np.add.at(img_data, (am_idx, ph_idx), 1)`）+ `flipud` 修正 ImageItem Y轴反转（row=0在顶部=笛卡尔Y=max），确保与散点图方向一致（纵向沿Y轴/幅值方向展开）
-- **Jet 颜色映射注册修复**：PyQtGraph 无内置 jet colormap，改为模块级 `_JET_CMAP = pg.colormap.ColorMap()` 直接引用，绕过 `pg.colormap.get()` 仅检查文件系统的限制
-- **`_version` 崩溃修复**：`_show_about()` 引用不存在的 `self._version`，在 `__init__` 中添加 `self._version = "1.0.3"`
-- **动态幅值范围扩展**：PRPDProcessor 初始 max_amplitude 从 100 提升至 10000，峰值超80%时自动扩展至 peak×1.2 并调用 `rebuild_matrix()` 重建矩阵，解决高幅值事件截断问题
-- **分析页面数据同步修复**：`analysis_page.py` 添加缺失的 `set_max_amplitude()` 调用，确保从文件加载数据时的热力图与监控页面行为一致
-- **调用顺序修正**：pd_controller 和 analysis_page 中统一为先 `update_scatter()` 后 `update_heatmap()`，确保热力图直方图使用最新散点数据
-- **PRPS 3D 散点图重构**：移除 pyqtgraph.opengl 实现（~500 行），替换为 Matplotlib 3D（懒加载+脏标记优化）
-- **完整坐标轴系统**：X(相位°)/Y(工频周期n)/Z(放电量) 三轴标签+刻度+网格
-- **ColorBar 集成**：Matplotlib 原生 colorbar（Jet 色图，Discharge a.u.）
-- **视觉比例优化**：`box_aspect=(1.45, 1.15, 1.20)`，视角 `elev=36°, azim=-122°`
-- **布局优化**：散点放大(s=25)、色条填充(shrink=0.88)、边距自适应防截断
-- **ColorBar 叠加 bug 修复**：`fig.clear()` 替代 `ax.clear()`
-- **代码量精简**：949 行 → 456 行（减少 52%）
+- 热力图团簇方向修复、Jet 颜色映射注册修复
+- _version 崩溃修复、动态幅值范围扩展
+- PRPS 3D 散点图重构（Matplotlib 懒加载）
 
 ### v1.0.2 (2026-06-05)
-- 新增数据分析页面：导入 CSV/Excel/TXT 实验数据，PRPD 图谱显示
-- 新增放电类型自动分类：内部气隙/电晕/沿面/悬浮颗粒（基于 6 扇区能量分布+规则引擎）
-- 新增分类报告导出：JSON/Excel/Word
-- 新增 PRPD 三种显示模式（散点图/热力图/密度图）并修复模式切换问题
-- 新增文件拖放导入，自适应去噪和阈值过滤
-- UI 布局优化：系统设置页重构、报警管理页按钮重新排布、设备管理页布局调整
-- 修复导航页索引偏移导致数据分析页不显示的问题
+- 新增数据分析页面、放电类型自动分类、报告导出（JSON/Excel/Word）
+- PRPD 三种显示模式、文件拖放导入
 
 ### v1.0.1 (2026-06-03)
-- 实时监测新增设备/通道切换下拉框
-- 报警统计卡片遮挡修复、报警数据同步修复
-- 设备列表持久化（JSON 保存/加载）
-- 设置变更实时推送到运行中服务
-- 性能优化：PRPD/趋势 list → deque、PRPS 原地切片
-- OpenGL 加速、窗口状态持久化
+- 设备/通道切换下拉框、报警同步修复
+- 设备列表持久化、性能优化（deque/原地切片/OpenGL）
 
 ### v1.0.0 (2026-06-02)
-- 初始版本：实时波形 20FPS、PRPD/FFT/PRPS 分析
-- 趋势分析 (1h/24h/7d/30d)、三级报警管理
-- FPGA 通信协议 (TCP+UDP)、数据模拟器
-- Fluent Design 界面、6 个功能页面
-- 25 个集成测试、PyInstaller 打包
+- 初始版本：实时波形、PRPD/FFT/PRPS 分析、趋势分析、三级报警
+- FPGA 通信协议、数据模拟器、Fluent Design 界面
 
 ---
 
@@ -442,4 +292,4 @@ MIT License
 
 ---
 
-**MCGS 系统**: v2.1.0 | **PD 系统**: v1.0.6 | **更新**: 2026-06-10
+**PD 系统**: v1.0.7 | **更新**: 2026-06-12

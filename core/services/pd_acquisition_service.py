@@ -22,7 +22,16 @@ from typing import Any, Callable, Dict, List, Optional
 import numpy as np
 
 from core.foundation.pd_data_bus import PDDataBus
-from core.processing import FFTProcessor, PeakDetector, PRPDProcessor, PRPSProcessor, RingBuffer
+from core.processing import (
+    AEEnvelopeProcessor,
+    AEParameterExtractor,
+    AEPeakDetector,
+    FFTProcessor,
+    PeakDetector,
+    PRPDProcessor,
+    PRPSProcessor,
+    RingBuffer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +98,21 @@ class AcquisitionService:
         self._peak_detectors: Dict[str, PeakDetector] = {}
         self._sample_rates: Dict[str, int] = {}  # 按通道存储采样率
 
+        # AE 处理器（每个通道一个实例）
+        self._ae_envelope_processors: Dict[str, AEEnvelopeProcessor] = {}
+        self._ae_peak_detectors: Dict[str, AEPeakDetector] = {}
+        self._ae_param_extractors: Dict[str, AEParameterExtractor] = {}
+        self._channel_coupling_types: Dict[str, str] = {}  # "dev:ch" -> "uhf" / "ae"
+
+        # AE 报警状态
+        self._ae_signal_loss_counters: Dict[str, int] = {}  # 连续无 hit 帧计数
+        self._ae_noise_counters: Dict[str, int] = {}  # 噪声超标连续帧计数
+        self._ae_alarm_state: Dict[str, set] = {}  # "dev:ch" -> {"signal_loss", "noise_floor"}
+        self._AE_SIGNAL_LOSS_THRESHOLD = 20  # 连续 20 帧无 hit → 信号丢失报警
+        self._AE_NOISE_THRESHOLD = 10.0  # RMS > 10mV → 噪声超标
+        self._AE_NOISE_CLEAR = 5.0  # RMS < 5mV → 清除噪声报警
+        self._AE_NOISE_FRAME_THRESHOLD = 10  # 持续 10 帧 → 触发/清除
+
         # 数据回调
         self._on_waveform_cb: Optional[Callable] = None
         self._on_pd_event_cb: Optional[Callable] = None
@@ -124,6 +148,21 @@ class AcquisitionService:
     def set_protocol(self, protocol: Any) -> None:
         self._protocol = protocol
 
+    def set_channel_coupling_type(self, device_id: str, channel_id: int, coupling_type: str) -> None:
+        """
+        设置通道耦合类型，决定数据处理管线
+
+        Args:
+            device_id: 设备 ID
+            channel_id: 通道 ID
+            coupling_type: "uhf" 或 "ae"
+        """
+        with self._lock:
+            key = self._channel_key(device_id, channel_id)
+            if coupling_type in ("uhf", "ae"):
+                self._channel_coupling_types[key] = coupling_type
+                logger.debug("通道 %s 耦合类型: %s", key, coupling_type)
+
     def start(self) -> bool:
         with self._lock:
             self._is_running = True
@@ -145,6 +184,13 @@ class AcquisitionService:
             self._prpd_decay_count.clear()
             self._observed_max_amp.clear()
             self._prps_frame_count.clear()
+            self._ae_envelope_processors.clear()
+            self._ae_peak_detectors.clear()
+            self._ae_param_extractors.clear()
+            self._channel_coupling_types.clear()
+            self._ae_signal_loss_counters.clear()
+            self._ae_noise_counters.clear()
+            self._ae_alarm_state.clear()
         logger.info("采集服务已停止")
 
     @property
@@ -197,6 +243,30 @@ class AcquisitionService:
                 self._peak_detectors[key] = PeakDetector(adaptive=True)
             return self._peak_detectors[key]
 
+    def get_or_create_ae_envelope(self, device_id: str, channel_id: int) -> AEEnvelopeProcessor:
+        with self._lock:
+            key = self._channel_key(device_id, channel_id)
+            if key not in self._ae_envelope_processors:
+                sr = self._sample_rates.get(key, 2_000_000)
+                self._ae_envelope_processors[key] = AEEnvelopeProcessor(sample_rate=sr)
+            return self._ae_envelope_processors[key]
+
+    def get_or_create_ae_peak_detector(self, device_id: str, channel_id: int) -> AEPeakDetector:
+        with self._lock:
+            key = self._channel_key(device_id, channel_id)
+            if key not in self._ae_peak_detectors:
+                self._ae_peak_detectors[key] = AEPeakDetector(
+                    threshold_mode="relative", threshold_value=0.1
+                )
+            return self._ae_peak_detectors[key]
+
+    def get_or_create_ae_param_extractor(self, device_id: str, channel_id: int) -> AEParameterExtractor:
+        with self._lock:
+            key = self._channel_key(device_id, channel_id)
+            if key not in self._ae_param_extractors:
+                self._ae_param_extractors[key] = AEParameterExtractor()
+            return self._ae_param_extractors[key]
+
     # ── 数据处理 Pipeline ────────────────────────────
 
     def process_data_frame(self, device_id: str, channel_id: int, data: Any) -> AcquisitionResult:
@@ -207,7 +277,14 @@ class AcquisitionService:
             data_type = type(data).__name__
 
             if "WaveformData" in data_type:
-                result = self._process_waveform(device_id, channel_id, data)
+                # 检测是否为 AE 波形数据或通道
+                is_ae_type = "AEWaveformData" in data_type
+                key = self._channel_key(device_id, channel_id)
+                coupling_type = self._channel_coupling_types.get(key, "uhf")
+                if is_ae_type or coupling_type == "ae":
+                    result = self._process_ae_waveform(device_id, channel_id, data)
+                else:
+                    result = self._process_uhf_waveform(device_id, channel_id, data)
             elif "FFTData" in data_type:
                 result = self._process_fft(device_id, channel_id, data)
             elif isinstance(data, dict) and "phase" in data:
@@ -228,7 +305,7 @@ class AcquisitionService:
 
         return result
 
-    def _process_waveform(self, device_id: str, channel_id: int, wf_data: Any) -> AcquisitionResult:
+    def _process_uhf_waveform(self, device_id: str, channel_id: int, wf_data: Any) -> AcquisitionResult:
         result = AcquisitionResult(device_id, channel_id)
         result.frame_type = "waveform"
 
@@ -271,7 +348,7 @@ class AcquisitionService:
         try:
             fft_proc = self.get_or_create_fft(device_id, channel_id)
             fft_result = fft_proc.compute(samples, detect_peaks=True)
-            self._data_bus.publish_fft_result(device_id, channel_id, fft_result)
+            self._data_bus.publish_fft_result(device_id, channel_id, fft_result, "uhf")
             self._stats["fft_computed"] += 1
         except Exception as e:
             logger.debug("[%s] FFT 异常: %s", device_id, e)
@@ -342,7 +419,7 @@ class AcquisitionService:
             logger.debug("[%s] PRPS 异常: %s", device_id, e)
 
         # 发布波形到 UI
-        self._data_bus.publish_waveform(device_id, channel_id, samples)
+        self._data_bus.publish_waveform(device_id, channel_id, samples, "uhf")
 
         result.success = True
         result.data = {
@@ -352,12 +429,278 @@ class AcquisitionService:
         }
         return result
 
+    def _process_ae_waveform(self, device_id: str, channel_id: int, wf_data: Any) -> AcquisitionResult:
+        """
+        AE 波形处理流水线
+
+        与 UHF 不同的处理路径:
+        1. 带通滤波 (20-200kHz)
+        2. Hilbert 包络提取
+        3. 包络 hit 检测
+        4. AE 参数提取
+        5. PRPD / PRPS / FFT (复用)
+        6. 发布包络波形到 UI
+        """
+        result = AcquisitionResult(device_id, channel_id)
+        result.frame_type = "ae_waveform"
+        start_ts = time.time()
+
+        # 提取样本
+        samples = np.array(getattr(wf_data, "samples", []), dtype=np.float64)
+        if len(samples) < 2:
+            result.error_message = "AE 波形数据不足"
+            return result
+
+        # 采样率
+        sr = getattr(wf_data, "sample_rate", 2_000_000) or 2_000_000
+        key = self._channel_key(device_id, channel_id)
+        self._sample_rates[key] = sr
+
+        # 存入环形缓冲区
+        buffer = self.get_or_create_buffer(device_id, channel_id)
+        buffer.extend(samples.tolist())
+
+        # 带通滤波
+        env_proc = self.get_or_create_ae_envelope(device_id, channel_id)
+        if sr != env_proc.sample_rate:
+            env_proc.sample_rate = sr
+        filtered = env_proc.bandpass_filter(samples)
+
+        # 包络提取
+        envelope = env_proc.compute_envelope(filtered, method="hilbert")
+
+        # 发布包络到 UI
+        self._data_bus.publish_ae_envelope(device_id, channel_id, envelope)
+
+        # Hit 检测
+        ae_detector = self.get_or_create_ae_peak_detector(device_id, channel_id)
+        hits = ae_detector.detect_hits(envelope, sr)
+
+        # 参数提取 + 发布
+        param_ext = self.get_or_create_ae_param_extractor(device_id, channel_id)
+        for hit in hits:
+            try:
+                features = param_ext.extract(samples, envelope, hit, sr)
+
+                # 发布 PD 事件 (复用告警/存储链路)
+                self._data_bus.publish_pd_event(
+                    device_id,
+                    channel_id,
+                    {
+                        "amplitude": hit.peak_amplitude,
+                        "phase": features.get("phase_deg", 0),
+                        "energy": hit.marse_energy,
+                        "polarity": features.get("polarity", 0),
+                        "rise_time_us": hit.rise_time_us,
+                        "duration_us": hit.duration_us,
+                        "counts": hit.counts,
+                        "marse_energy": hit.marse_energy,
+                        "avg_frequency_khz": hit.avg_frequency_khz,
+                        "frequency_mhz": hit.avg_frequency_khz / 1000,
+                        "signal_quality": features.get("signal_quality", 50),
+                        "timestamp": time.time(),
+                    },
+                )
+
+                # 发布 AE hit (专用于 UI AE 参数面板)
+                self._data_bus.publish_ae_hit(device_id, channel_id, features)
+
+                # PRPD 更新
+                prpd = self.get_or_create_prpd(device_id, channel_id)
+                prpd.add_event(
+                    phase=hit.phase_deg,
+                    amplitude=hit.peak_amplitude,
+                    polarity=hit.polarity,
+                    energy=hit.marse_energy,
+                )
+                self._stats["pd_events_detected"] += 1
+            except Exception as e:
+                logger.debug("[%s] AE hit 处理异常: %s", device_id, e)
+
+        # FFT 计算 (AE 频段)
+        try:
+            fft_proc = self.get_or_create_fft(device_id, channel_id)
+            fft_result = fft_proc.compute(samples, detect_peaks=True)
+            # 覆盖频段统计为 AE 频段
+            fft_result.band_stats = fft_proc.compute_band_stats(
+                fft_result.frequencies, fft_result.magnitudes, bands=FFTProcessor.AE_BANDS
+            )
+            self._data_bus.publish_fft_result(device_id, channel_id, fft_result, "ae")
+            self._stats["fft_computed"] += 1
+        except Exception as e:
+            logger.debug("[%s] AE FFT 异常: %s", device_id, e)
+
+        # PRPD 定期发布
+        try:
+            prpd_proc = self.get_or_create_prpd(device_id, channel_id)
+
+            # 动态幅值扩展
+            if hits:
+                frame_max_amp = max(h.peak_amplitude for h in hits)
+                prev_max = self._observed_max_amp.get(key, 0.0)
+                if frame_max_amp > prev_max:
+                    self._observed_max_amp[key] = frame_max_amp
+                    if frame_max_amp > prpd_proc.max_amplitude * 0.8:
+                        new_max = frame_max_amp * 1.2
+                        prpd_proc.max_amplitude = new_max
+                        prpd_proc.rebuild_matrix()
+
+            # 每 20 帧衰减
+            if key not in self._prpd_decay_count:
+                self._prpd_decay_count[key] = 0
+            self._prpd_decay_count[key] += 1
+            if self._prpd_decay_count[key] >= 20:
+                self._prpd_decay_count[key] = 0
+                prpd_proc.decay(self.PRPD_DECAY_FACTOR)
+
+            # 每 50 帧发布
+            if key not in self._prpd_frame_count:
+                self._prpd_frame_count[key] = 0
+            self._prpd_frame_count[key] += 1
+            if self._prpd_frame_count[key] >= 50:
+                self._prpd_frame_count[key] = 0
+                prpd_result = prpd_proc.compute()
+                self._data_bus.publish_prpd_result(device_id, channel_id, prpd_result)
+        except Exception as e:
+            logger.debug("[%s] AE PRPD 异常: %s", device_id, e)
+
+        # PRPS 更新
+        try:
+            prps_proc = self.get_or_create_prps(device_id, channel_id)
+            phase_binned = np.zeros(360)
+            for hit in hits[:360]:
+                phase_idx = int(hit.phase_deg) % 360
+                phase_binned[phase_idx] = max(phase_binned[phase_idx], hit.peak_amplitude)
+            prps_proc.add_cycle(phase_binned)
+
+            if key not in self._prps_frame_count:
+                self._prps_frame_count[key] = 0
+            self._prps_frame_count[key] += 1
+            if self._prps_frame_count[key] >= self._prps_publish_interval:
+                self._prps_frame_count[key] = 0
+                prps_result = prps_proc.compute()
+                self._data_bus.publish_prps_result(device_id, channel_id, prps_result)
+        except Exception as e:
+            logger.debug("[%s] AE PRPS 异常: %s", device_id, e)
+
+        # ── AE 报警检测 ────────────────────────────
+        try:
+            self._check_ae_alarms(device_id, channel_id, key, hits, filtered, env_proc)
+        except Exception as e:
+            logger.debug("[%s] AE 报警检测异常: %s", device_id, e)
+
+        # 发布包络波形到波形控件
+        self._data_bus.publish_waveform(device_id, channel_id, envelope, "ae")
+
+        self._stats["waveforms_processed"] += 1
+        result.success = True
+        result.duration_ms = (time.time() - start_ts) * 1000
+        result.data = {
+            "samples": envelope,
+            "sample_rate": sr,
+            "n_hits": len(hits),
+        }
+        return result
+
+    def _check_ae_alarms(
+        self,
+        device_id: str,
+        channel_id: int,
+        key: str,
+        hits: list,
+        filtered: np.ndarray,
+        env_proc: AEEnvelopeProcessor,
+    ) -> None:
+        """
+        AE 通道报警检测（信号丢失 + 噪声超标）
+
+        - ae_signal_loss: 连续 N 帧无 hit → warning
+        - ae_noise_floor: 噪声 RMS 持续超标 → warning
+        """
+        if key not in self._ae_alarm_state:
+            self._ae_alarm_state[key] = set()
+        if key not in self._ae_signal_loss_counters:
+            self._ae_signal_loss_counters[key] = 0
+        if key not in self._ae_noise_counters:
+            self._ae_noise_counters[key] = 0
+
+        active_alarms = self._ae_alarm_state[key]
+        signal_loss_count = self._ae_signal_loss_counters[key]
+        noise_count = self._ae_noise_counters[key]
+
+        noise_rms = env_proc.compute_rms(filtered)
+
+        # ── 信号丢失检测 ──────────────────────────
+        if len(hits) == 0:
+            signal_loss_count += 1
+        else:
+            signal_loss_count = 0
+            # 恢复信号 → 清除信号丢失报警
+            if "signal_loss" in active_alarms:
+                active_alarms.discard("signal_loss")
+                self._data_bus.publish_alarm_cleared(
+                    device_id, "ae_signal_loss", "AE 信号已恢复"
+                )
+                logger.info("[AE][%s] 信号恢复，清除信号丢失报警", key)
+
+        if "signal_loss" not in active_alarms and signal_loss_count >= self._AE_SIGNAL_LOSS_THRESHOLD:
+            active_alarms.add("signal_loss")
+            self._data_bus.publish_alarm(
+                device_id,
+                {
+                    "device_id": device_id,
+                    "channel_id": channel_id,
+                    "alarm_type": "ae_signal_loss",
+                    "level": "warning",
+                    "amplitude": 0,
+                    "threshold": 0,
+                    "description": "AE 信号丢失 - 传感器可能脱落或损坏",
+                    "timestamp": time.time(),
+                },
+            )
+            logger.warning("[AE][%s] 信号丢失报警触发 (%d 帧无 hit)", key, signal_loss_count)
+
+        self._ae_signal_loss_counters[key] = signal_loss_count
+
+        # ── 噪声超标检测 ──────────────────────────
+        if noise_rms > self._AE_NOISE_THRESHOLD:
+            noise_count += 1
+        else:
+            noise_count = max(0, noise_count - 1)
+
+        if "noise_floor" not in active_alarms and noise_count >= self._AE_NOISE_FRAME_THRESHOLD:
+            active_alarms.add("noise_floor")
+            self._data_bus.publish_alarm(
+                device_id,
+                {
+                    "device_id": device_id,
+                    "channel_id": channel_id,
+                    "alarm_type": "ae_noise_floor",
+                    "level": "warning",
+                    "amplitude": noise_rms,
+                    "threshold": self._AE_NOISE_THRESHOLD,
+                    "description": f"AE 噪声超限 - RMS {noise_rms:.1f}mV",
+                    "timestamp": time.time(),
+                },
+            )
+            logger.warning("[AE][%s] 噪声超标报警触发: RMS=%.1f mV", key, noise_rms)
+
+        # 噪声回落 → 清除噪声报警
+        if "noise_floor" in active_alarms and noise_rms < self._AE_NOISE_CLEAR:
+            active_alarms.discard("noise_floor")
+            self._data_bus.publish_alarm_cleared(
+                device_id, "ae_noise_floor", f"AE 噪声已回落至 {noise_rms:.1f}mV"
+            )
+            logger.info("[AE][%s] 噪声回落，清除噪声报警 (RMS=%.1f mV)", key, noise_rms)
+
+        self._ae_noise_counters[key] = noise_count
+
     def _process_fft(self, device_id: str, channel_id: int, fft_data: Any) -> AcquisitionResult:
         result = AcquisitionResult(device_id, channel_id)
         result.frame_type = "fft"
         result.success = True
         result.data = fft_data
-        self._data_bus.publish_fft_result(device_id, channel_id, fft_data)
+        self._data_bus.publish_fft_result(device_id, channel_id, fft_data, "uhf")
         self._stats["fft_computed"] += 1
         return result
 
@@ -423,6 +766,13 @@ class AcquisitionService:
             self._sample_rates.pop(key, None)
             self._prpd_frame_count.pop(key, None)
             self._prps_frame_count.pop(key, None)
+            self._ae_envelope_processors.pop(key, None)
+            self._ae_peak_detectors.pop(key, None)
+            self._ae_param_extractors.pop(key, None)
+            self._channel_coupling_types.pop(key, None)
+            self._ae_signal_loss_counters.pop(key, None)
+            self._ae_noise_counters.pop(key, None)
+            self._ae_alarm_state.pop(key, None)
 
     def release_device(self, device_id: str) -> None:
         prefix = f"{device_id}:"
@@ -451,3 +801,24 @@ class AcquisitionService:
             for d in list(self._prps_frame_count.keys()):
                 if d.startswith(prefix):
                     del self._prps_frame_count[d]
+            for d in list(self._ae_envelope_processors.keys()):
+                if d.startswith(prefix):
+                    del self._ae_envelope_processors[d]
+            for d in list(self._ae_peak_detectors.keys()):
+                if d.startswith(prefix):
+                    del self._ae_peak_detectors[d]
+            for d in list(self._ae_param_extractors.keys()):
+                if d.startswith(prefix):
+                    del self._ae_param_extractors[d]
+            for d in list(self._channel_coupling_types.keys()):
+                if d.startswith(prefix):
+                    del self._channel_coupling_types[d]
+            for d in list(self._ae_signal_loss_counters.keys()):
+                if d.startswith(prefix):
+                    del self._ae_signal_loss_counters[d]
+            for d in list(self._ae_noise_counters.keys()):
+                if d.startswith(prefix):
+                    del self._ae_noise_counters[d]
+            for d in list(self._ae_alarm_state.keys()):
+                if d.startswith(prefix):
+                    del self._ae_alarm_state[d]

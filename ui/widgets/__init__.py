@@ -3,7 +3,7 @@
 UI 组件库 - 自定义 Widget 组件集合
 
 提供统一的 Fluent Design 风格组件，替代原生 Qt 控件。
-所有组件支持主题色适配。
+所有组件使用 design_tokens.py 的 DT 令牌，支持主题适配。
 """
 
 from PySide6.QtCore import Qt
@@ -25,45 +25,19 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-# ═══════════════════════════════════════════════════════════
-# 颜色常量
-# ═══════════════════════════════════════════════════════════
-
-
-class Colors:
-    """通用颜色常量"""
-
-    PRIMARY = "#2196F3"
-    PRIMARY_HOVER = "#1976D2"
-    PRIMARY_ACTIVE = "#1565C0"
-    SUCCESS = "#4CAF50"
-    SUCCESS_HOVER = "#43A047"
-    DANGER = "#F44336"
-    DANGER_HOVER = "#E53935"
-    WARNING = "#FFC107"
-    TEXT_PRIMARY = "#1F2937"
-    TEXT_SECONDARY = "#6B7280"
-    TEXT_TERTIARY = "#9CA3AF"
-    BG_BASE = "#FFFFFF"
-    BG_HOVER = "#F3F4F6"
-    BG_ACTIVE = "#E5E7EB"
-    BORDER = "#D1D5DB"
-    BORDER_FOCUS = "#2196F3"
-    RADIUS = "6px"
-    RADIUS_LG = "8px"
-
+from ui.design_tokens import DT
 
 # ═══════════════════════════════════════════════════════════
-# 基础按钮样式生成器
+# 基础按钮样式生成器（统一使用 DT.C 令牌）
 # ═══════════════════════════════════════════════════════════
 
 
 def _button_base_style(
     bg: str = "",
     bg_hover: str = "",
-    text_color: str = Colors.TEXT_PRIMARY,
-    border: str = f"1px solid {Colors.BORDER}",
-    radius: str = Colors.RADIUS,
+    text_color: str = DT.C.TEXT_PRIMARY,
+    border: str = f"1px solid {DT.C.BORDER_DEFAULT}",
+    radius: str = f"{DT.R.MD}px",
 ) -> str:
     """生成按钮基础 QSS"""
     lines = [
@@ -75,7 +49,7 @@ def _button_base_style(
         lines.append(f"QPushButton:hover {{ background: {bg_hover}; }}")
     if bg:
         lines.append(f"QPushButton:pressed {{ background: {bg}; opacity: 0.8; }}")
-    lines.append("QPushButton:disabled { color: #9CA3AF; background: #F3F4F6; }")
+    lines.append(f"QPushButton:disabled {{ color: {DT.C.TEXT_DISABLED}; background: {DT.C.BG_DISABLED}; }}")
     return "\n".join(lines)
 
 
@@ -91,9 +65,9 @@ class PrimaryButton(QPushButton):
         super().__init__(text, parent)
         self.setStyleSheet(
             _button_base_style(
-                bg=Colors.PRIMARY,
-                bg_hover=Colors.PRIMARY_HOVER,
-                text_color="#FFFFFF",
+                bg=DT.C.ACCENT_PRIMARY,
+                bg_hover=DT.C.ACCENT_HOVER,
+                text_color=DT.C.TEXT_ON_ACCENT,
                 border="none",
             )
         )
@@ -109,8 +83,8 @@ class SecondaryButton(QPushButton):
         self.setStyleSheet(
             _button_base_style(
                 bg="",
-                bg_hover=Colors.BG_HOVER,
-                text_color=Colors.TEXT_PRIMARY,
+                bg_hover=DT.C.BG_HOVER,
+                text_color=DT.C.TEXT_PRIMARY,
             )
         )
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -124,9 +98,9 @@ class SuccessButton(QPushButton):
         super().__init__(text, parent)
         self.setStyleSheet(
             _button_base_style(
-                bg=Colors.SUCCESS,
-                bg_hover=Colors.SUCCESS_HOVER,
-                text_color="#FFFFFF",
+                bg=DT.C.STATUS_SUCCESS,
+                bg_hover=DT.C.DEVICE_ONLINE,
+                text_color=DT.C.TEXT_ON_ACCENT,
                 border="none",
             )
         )
@@ -141,9 +115,9 @@ class DangerButton(QPushButton):
         super().__init__(text, parent)
         self.setStyleSheet(
             _button_base_style(
-                bg=Colors.DANGER,
-                bg_hover=Colors.DANGER_HOVER,
-                text_color="#FFFFFF",
+                bg=DT.C.STATUS_ERROR,
+                bg_hover="#B91C1C",
+                text_color=DT.C.TEXT_ON_DANGER,
                 border="none",
             )
         )
@@ -159,8 +133,8 @@ class GhostButton(QPushButton):
         self.setStyleSheet(
             _button_base_style(
                 bg="",
-                bg_hover=Colors.BG_HOVER,
-                text_color=Colors.TEXT_SECONDARY,
+                bg_hover=DT.C.BG_HOVER,
+                text_color=DT.C.TEXT_SECONDARY,
                 border="none",
             )
         )
@@ -179,24 +153,7 @@ class LineEdit(QLineEdit):
     def __init__(self, placeholder: str = "", parent: QWidget = None):
         super().__init__(parent)
         self.setPlaceholderText(placeholder)
-        self.setStyleSheet(
-            f"""
-            QLineEdit {{
-                background: {Colors.BG_BASE};
-                border: 1px solid {Colors.BORDER};
-                border-radius: {Colors.RADIUS};
-                padding: 6px 12px;
-                font-size: 13px;
-                color: {Colors.TEXT_PRIMARY};
-            }}
-            QLineEdit:focus {{
-                border-color: {Colors.BORDER_FOCUS};
-            }}
-            QLineEdit::placeholder {{
-                color: {Colors.TEXT_TERTIARY};
-            }}
-        """
-        )
+        self.setStyleSheet(DT.sheet.sheet_input())
         self.setFixedHeight(36)
 
 
@@ -205,46 +162,7 @@ class ComboBox(QComboBox):
 
     def __init__(self, parent: QWidget = None):
         super().__init__(parent)
-        self.setStyleSheet(
-            f"""
-            QComboBox {{
-                background: {Colors.BG_BASE};
-                border: 1px solid {Colors.BORDER};
-                border-radius: {Colors.RADIUS};
-                padding: 6px 12px;
-                font-size: 13px;
-                color: {Colors.TEXT_PRIMARY};
-                min-width: 120px;
-            }}
-            QComboBox:focus {{
-                border-color: {Colors.BORDER_FOCUS};
-            }}
-            QComboBox::drop-down {{
-                border: none;
-                width: 24px;
-            }}
-            QComboBox::down-arrow {{
-                image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 6px solid {Colors.TEXT_SECONDARY};
-                border-bottom: none;
-                margin-right: 8px;
-            }}
-            QComboBox::down-arrow:on {{
-                border-top: none;
-                border-bottom: 6px solid {Colors.TEXT_SECONDARY};
-            }}
-            QComboBox QAbstractItemView {{
-                background: {Colors.BG_BASE};
-                border: 1px solid {Colors.BORDER};
-                border-radius: {Colors.RADIUS};
-                selection-background-color: #E3F2FD;
-                selection-color: #1565C0;
-                font-size: 13px;
-            }}
-        """
-        )
+        self.setStyleSheet(DT.sheet.sheet_combo(min_width=120))
         self.setFixedHeight(36)
 
 
@@ -257,22 +175,22 @@ class Checkbox(QCheckBox):
             f"""
             QCheckBox {{
                 font-size: 13px;
-                color: {Colors.TEXT_PRIMARY};
+                color: {DT.C.TEXT_PRIMARY};
                 spacing: 6px;
             }}
             QCheckBox::indicator {{
                 width: 16px;
                 height: 16px;
-                border: 1px solid {Colors.BORDER};
+                border: 1px solid {DT.C.BORDER_DEFAULT};
                 border-radius: 3px;
-                background: {Colors.BG_BASE};
+                background: {DT.C.BG_PRIMARY};
             }}
             QCheckBox::indicator:checked {{
-                background: {Colors.PRIMARY};
-                border-color: {Colors.PRIMARY};
+                background: {DT.C.ACCENT_PRIMARY};
+                border-color: {DT.C.ACCENT_PRIMARY};
             }}
             QCheckBox::indicator:hover {{
-                border-color: {Colors.BORDER_FOCUS};
+                border-color: {DT.C.BORDER_FOCUS};
             }}
         """
         )
@@ -288,7 +206,7 @@ class InputWithLabel(QWidget):
         layout.setSpacing(4)
 
         self.label = QLabel(label)
-        self.label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; font-size: 12px; font-weight: 500;")
+        self.label.setStyleSheet(f"color: {DT.C.TEXT_SECONDARY}; font-size: 12px; font-weight: 500;")
 
         self.input = LineEdit()
         self.input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -327,6 +245,44 @@ class DeviceTree(QTreeWidget):
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
         self.setColumnWidth(4, 170)
 
+        self._apply_style()
+
+    def _apply_style(self) -> None:
+        """应用统一样式"""
+        self.setStyleSheet(
+            f"""
+            QTreeWidget {{
+                background-color: {DT.C.BG_PRIMARY};
+                alternate-background-color: {DT.C.BG_SECONDARY};
+                border: 1px solid {DT.C.BORDER_DEFAULT};
+                border-radius: {DT.R.MD}px;
+                padding: 4px;
+                font-size: 13px;
+                outline: none;
+            }}
+            QTreeWidget::item {{
+                padding: 8px 4px;
+                border-bottom: 1px solid {DT.C.BORDER_SUBTLE};
+            }}
+            QTreeWidget::item:hover {{
+                background-color: {DT.C.BG_HOVER};
+            }}
+            QTreeWidget::item:selected {{
+                background-color: {DT.C.ACCENT_SUBTLE};
+                color: {DT.C.ACCENT_PRIMARY};
+            }}
+            QHeaderView::section {{
+                background-color: {DT.C.BG_SECONDARY};
+                color: {DT.C.TEXT_SECONDARY};
+                border: none;
+                border-bottom: 1px solid {DT.C.BORDER_DEFAULT};
+                padding: 8px 6px;
+                font-size: 12px;
+                font-weight: 600;
+            }}
+        """
+        )
+
     def _on_context_menu(self, pos):
         from PySide6.QtWidgets import QMenu
 
@@ -353,40 +309,6 @@ class DeviceTree(QTreeWidget):
 
         menu.exec(self.viewport().mapToGlobal(pos))
 
-        self.setStyleSheet(
-            """
-            QTreeWidget {
-                background-color: #FFFFFF;
-                alternate-background-color: #F6F8FA;
-                border: 1px solid #E5E7EB;
-                border-radius: 8px;
-                padding: 4px;
-                font-size: 13px;
-                outline: none;
-            }
-            QTreeWidget::item {
-                padding: 8px 4px;
-                border-bottom: 1px solid #F0F2F5;
-            }
-            QTreeWidget::item:hover {
-                background-color: #F0F2F5;
-            }
-            QTreeWidget::item:selected {
-                background-color: #E3F2FD;
-                color: #1565C0;
-            }
-            QHeaderView::section {
-                background-color: #F6F8FA;
-                color: #57606A;
-                border: none;
-                border-bottom: 1px solid #E5E7EB;
-                padding: 8px 6px;
-                font-size: 12px;
-                font-weight: 600;
-            }
-        """
-        )
-
 
 # ═══════════════════════════════════════════════════════════
 # 数据表格组件
@@ -408,38 +330,7 @@ class DataTable(QTableWidget):
         self.setShowGrid(False)
         self.verticalHeader().setVisible(False)
 
-        self.setStyleSheet(
-            f"""
-            QTableWidget {{
-                background: {Colors.BG_BASE};
-                alternate-background-color: #F9FAFB;
-                border: 1px solid {Colors.BORDER};
-                border-radius: {Colors.RADIUS_LG};
-                font-size: 13px;
-                outline: none;
-            }}
-            QTableWidget::item {{
-                padding: 8px 12px;
-                border-bottom: 1px solid #F3F4F6;
-            }}
-            QTableWidget::item:hover {{
-                background: {Colors.BG_HOVER};
-            }}
-            QTableWidget::item:selected {{
-                background: #E3F2FD;
-                color: #1565C0;
-            }}
-            QHeaderView::section {{
-                background: #F6F8FA;
-                color: #57606A;
-                border: none;
-                border-bottom: 1px solid #E5E7EB;
-                padding: 8px 12px;
-                font-size: 12px;
-                font-weight: 600;
-            }}
-        """
-        )
+        self.setStyleSheet(DT.sheet.sheet_table())
 
 
 # ═══════════════════════════════════════════════════════════
@@ -451,13 +342,13 @@ class StatusBadge(QWidget):
     """状态徽章 - 带颜色圆点和文字"""
 
     STATUS_COLORS = {
-        "online": "#4CAF50",
-        "offline": "#9CA3AF",
-        "warning": "#FFC107",
-        "error": "#F44336",
-        "info": "#2196F3",
-        "success": "#4CAF50",
-        "default": "#9CA3AF",
+        "online": DT.C.STATUS_SUCCESS,
+        "offline": DT.C.TEXT_TERTIARY,
+        "warning": DT.C.STATUS_WARNING,
+        "error": DT.C.STATUS_ERROR,
+        "info": DT.C.ACCENT_PRIMARY,
+        "success": DT.C.STATUS_SUCCESS,
+        "default": DT.C.TEXT_TERTIARY,
     }
 
     def __init__(self, text: str = "", status: str = "default", parent: QWidget = None):
@@ -473,7 +364,7 @@ class StatusBadge(QWidget):
         self._dot.setFixedSize(8, 8)
 
         self._label = QLabel(text)
-        self._label.setStyleSheet(f"font-size: 12px; color: {Colors.TEXT_SECONDARY};")
+        self._label.setStyleSheet(f"font-size: 12px; color: {DT.C.TEXT_SECONDARY};")
 
         layout.addWidget(self._dot)
         layout.addWidget(self._label)
@@ -513,14 +404,14 @@ class DataCard(QFrame):
         self.setStyleSheet(
             f"""
             DataCard {{
-                background: {Colors.BG_BASE};
-                border: 1px solid {Colors.BORDER};
-                border-radius: {Colors.RADIUS_LG};
+                background: {DT.C.BG_PRIMARY};
+                border: 1px solid {DT.C.BORDER_DEFAULT};
+                border-radius: {DT.R.LG}px;
                 padding: 16px;
             }}
             DataCard:hover {{
-                border-color: {Colors.BORDER_FOCUS};
-                background: #F8FBFF;
+                border-color: {DT.C.BORDER_HOVER};
+                background: {DT.C.BG_HOVER};
             }}
         """
         )
@@ -530,17 +421,17 @@ class DataCard(QFrame):
         layout.setSpacing(4)
 
         self.title_label = QLabel(title)
-        self.title_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; font-size: 12px; font-weight: 500;")
+        self.title_label.setStyleSheet(f"color: {DT.C.TEXT_SECONDARY}; font-size: 12px; font-weight: 500;")
 
         self.value_label = QLabel(value)
-        self.value_label.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; font-size: 24px; font-weight: 700;")
+        self.value_label.setStyleSheet(f"color: {DT.C.TEXT_PRIMARY}; font-size: 24px; font-weight: 700;")
         self.value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         layout.addWidget(self.title_label)
         layout.addWidget(self.value_label, 1)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.unit_label = None  # 可选: 外部添加
+        self.unit_label = None
 
     def set_value(self, value: str) -> None:
         """更新显示值"""
@@ -559,23 +450,14 @@ class ActionCard(QFrame):
     def __init__(self, title: str = "", parent: QWidget = None):
         super().__init__(parent)
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setStyleSheet(
-            f"""
-            ActionCard {{
-                background: {Colors.BG_BASE};
-                border: 1px solid {Colors.BORDER};
-                border-radius: {Colors.RADIUS_LG};
-                padding: 16px;
-            }}
-        """
-        )
+        self.setStyleSheet(DT.sheet.sheet_card("ActionCard"))
 
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(16, 12, 16, 12)
         self._layout.setSpacing(12)
 
         self.title_label = QLabel(title)
-        self.title_label.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; font-size: 14px; font-weight: 600;")
+        self.title_label.setStyleSheet(f"color: {DT.C.TEXT_PRIMARY}; font-size: 14px; font-weight: 600;")
         self._layout.addWidget(self.title_label)
 
     def add_widget(self, widget: QWidget) -> None:
@@ -591,8 +473,6 @@ class ActionCard(QFrame):
 # 可视化组件 (从 visual 模块导入)
 # ═══════════════════════════════════════════════════════════
 
-from .visual import AnimatedStatusBadge, RealtimeChart
-
 # UHF PD 分析控件 (PyQtGraph)
 try:
     from .waveform_widget import WaveformWidget
@@ -600,6 +480,8 @@ try:
     from .prps_widget import PRPSWidget
     from .fft_widget import FFTWidget
     from .trend_chart_widget import TrendChartWidget
+    from .ae_parameters_widget import AEParametersWidget
+    from .ae_localization_widget import AELocalizationWidget
 except ImportError as e:
     import logging
     logging.getLogger(__name__).warning("部分 PD 分析控件加载失败: %s", e)

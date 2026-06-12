@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
 """UHF PD 信号处理模块
 
-包含: 环形缓冲区, FFT 频谱分析, PRPD 分析, PRPS 分析, 峰值检测
+包含: 环形缓冲区, FFT 频谱分析, PRPD 分析, PRPS 分析, 峰值检测, AE 处理
 """
 
-from .fft_processor import FFTProcessor, FFTResult
+from .ae_envelope import AEEnvelopeProcessor
+from .ae_localizer import AELocalizer, LocalizationResult, SensorPosition, SOUND_SPEED_AIR, SOUND_SPEED_OIL, SOUND_SPEED_SF6
+from .ae_parameter_extractor import AEParameterExtractor
+from .ae_peak_detector import AEPeakDetector, AEHitInfo
+from .fft_processor import FFTProcessor, FFTResult, FFTPeakInfo
 from .peak_detector import PeakDetector, PeakInfo
 from .prpd_processor import PRPDProcessor, PRPDResult
 from .prps_processor import PRPSProcessor, PRPSResult
@@ -14,10 +18,21 @@ __all__ = [
     "RingBuffer",
     "FFTProcessor",
     "FFTResult",
+    "FFTPeakInfo",
     "PRPDProcessor",
     "PRPDResult",
     "PRPSProcessor",
     "PRPSResult",
     "PeakDetector",
     "PeakInfo",
+    "AEEnvelopeProcessor",
+    "AEPeakDetector",
+    "AEHitInfo",
+    "AEParameterExtractor",
+    "AELocalizer",
+    "LocalizationResult",
+    "SensorPosition",
+    "SOUND_SPEED_AIR",
+    "SOUND_SPEED_OIL",
+    "SOUND_SPEED_SF6",
 ]

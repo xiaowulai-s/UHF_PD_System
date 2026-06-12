@@ -62,7 +62,7 @@ class Colors:
     DEVICE_ONLINE_LIGHT = "#54AE76"
     DEVICE_OFFLINE = "#F6F8FA"  # 设备离线 - 浅灰（配合深色文字）
     DEVICE_OFFLINE_LIGHT = "#E5E7EB"
-    DEVICE_WARNING = "D29922"  # 设备警告 - Fluent金色
+    DEVICE_WARNING = "#D29922"  # 设备警告 - Fluent金色
     DEVICE_WARNING_LIGHT = "#E6B34D"
     DEVICE_ERROR = "#CF222E"  # 设备错误 - Fluent红色
     DEVICE_ERROR_LIGHT = "#E85B65"
@@ -92,6 +92,19 @@ class Colors:
     # === 特殊用途色 (Special Purpose) ===
     SHADOW_COLOR = "rgba(0, 0, 0, 0.10)"  # 阴影颜色
     DIVIDER = "#E5E7EB"  # 分割线
+
+    # === 图表专用色 (Chart Colors) ===
+    CHART_BACKGROUND = "#FAFBFC"  # 图表背景
+    CHART_GRID = "rgba(0, 0, 0, 0.08)"  # 网格线
+    CHART_FOREGROUND = "#24292F"  # 图表前景/坐标轴
+    CHART_COLORMAP = "inferno"  # 默认色彩映射（色盲友好）
+    CHART_WAVEFORM = "#0969DA"  # 波形颜色
+    CHART_SPECTRUM = "#1A7F37"  # 频谱颜色
+
+    # === ISA-18.2 报警色 (Alarm Colors) ===
+    ALARM_UNACKNOWLEDGED = "#FF4444"  # 未确认报警（需闪烁）
+    ALARM_ACKNOWLEDGED = "#FF8800"  # 已确认报警（静态）
+    ALARM_RETURN_NORMAL = "#44AA44"  # 恢复正常
 
 
 class Typography:
@@ -128,7 +141,7 @@ class Typography:
     DATA_MEDIUM = ("Segoe UI Variable", 22, "Bold")  # 中等数值
     DATA = ("Segoe UI Variable", 18, "SemiBold")  # 标准数值
     DATA_SMALL = ("Segoe UI Variable", 14, "Medium")  # 小数值
-    CODE = ("Consolas", "Cascadia Code", 12, "Regular")  # 代码/等宽字体
+    CODE = ("Consolas", 12, "Regular")  # 代码/等宽字体
 
     @staticmethod
     def get_font(name: str, size: int, weight: str = "Regular"):
@@ -312,6 +325,148 @@ class ZIndex:
 # ═══════════════════════════════════════════════════════════
 
 
+class DarkColors:
+    """
+    深色主题色板 - 工业控制室 24h 运行场景
+
+    基于 Fluent Design 2.0 Dark Theme + 工业监控优化
+    """
+
+    # === 文字颜色 ===
+    TEXT_PRIMARY = "#E0E0E0"
+    TEXT_SECONDARY = "#A0A0A0"
+    TEXT_TERTIARY = "#707070"
+    TEXT_DISABLED = "#505050"
+    TEXT_INVERSE = "#1A1A2E"
+    TEXT_LINK = "#4DA6FF"
+    TEXT_ON_ACCENT = "#FFFFFF"
+    TEXT_ON_DANGER = "#FFFFFF"
+
+    # === 强调色 ===
+    ACCENT_PRIMARY = "#4DA6FF"
+    ACCENT_SECONDARY = "#8B949E"
+    ACCENT_TERTIARY = "#30363D"
+    ACCENT_HOVER = "#79B8FF"
+    ACCENT_ACTIVE = "#B0D4FF"
+    ACCENT_SUBTLE = "#1A3A5C"
+
+    # === 状态色 ===
+    STATUS_SUCCESS = "#3FB950"
+    STATUS_SUCCESS_BG = "#1A3320"
+    STATUS_WARNING = "#D29922"
+    STATUS_WARNING_BG = "#3D2E00"
+    STATUS_ERROR = "#F85149"
+    STATUS_ERROR_BG = "#3D1418"
+    STATUS_INFO = "#4DA6FF"
+    STATUS_INFO_BG = "#1A3A5C"
+
+    # === 设备状态色 ===
+    DEVICE_ONLINE = "#3FB950"
+    DEVICE_ONLINE_LIGHT = "#2EA043"
+    DEVICE_OFFLINE = "#30363D"
+    DEVICE_OFFLINE_LIGHT = "#21262D"
+    DEVICE_WARNING = "#D29922"
+    DEVICE_WARNING_LIGHT = "#BB8009"
+    DEVICE_ERROR = "#F85149"
+    DEVICE_ERROR_LIGHT = "#DA3633"
+    DEVICE_IDLE = "#4DA6FF"
+    DEVICE_IDLE_LIGHT = "#388BFD"
+
+    # === 边框颜色 ===
+    BORDER_DEFAULT = "#30363D"
+    BORDER_FOCUS = "#4DA6FF"
+    BORDER_HOVER = "#484F58"
+    BORDER_STRONG = "#6E7681"
+    BORDER_SUBTLE = "#21262D"
+    BORDER_TRANSPARENT = "transparent"
+
+    # === 背景颜色 ===
+    BG_PRIMARY = "#1A1A2E"
+    BG_SECONDARY = "#16213E"
+    BG_TERTIARY = "#0F3460"
+    BG_HOVER = "#1E2A4A"
+    BG_ACTIVE = "#2D3A5A"
+    BG_DISABLED = "#21262D"
+    BG_OVERLAY = "rgba(0, 0, 0, 0.6)"
+    BG_MODAL = "#1A1A2E"
+    BG_TOOLTIP = "#E0E0E0"
+    BG_BASE = "#0F1629"
+
+    # === 特殊用途色 ===
+    SHADOW_COLOR = "rgba(0, 0, 0, 0.30)"
+    DIVIDER = "#21262D"
+
+    # === 图表专用色 ===
+    CHART_BACKGROUND = "#0F1629"
+    CHART_GRID = "rgba(255, 255, 255, 0.06)"
+    CHART_FOREGROUND = "#A0A0A0"
+    CHART_COLORMAP = "inferno"
+    CHART_WAVEFORM = "#4DA6FF"
+    CHART_SPECTRUM = "#3FB950"
+
+    # === ISA-18.2 报警色 ===
+    ALARM_UNACKNOWLEDGED = "#FF4444"
+    ALARM_ACKNOWLEDGED = "#FF8800"
+    ALARM_RETURN_NORMAL = "#3FB950"
+
+
+class ThemeManager:
+    """主题管理器 - 运行时切换亮色/深色主题"""
+
+    _instance = None
+    _is_dark = False
+
+    @classmethod
+    def instance(cls):
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    @classmethod
+    def is_dark(cls) -> bool:
+        return cls._is_dark
+
+    @classmethod
+    def set_dark(cls, dark: bool = True) -> None:
+        """切换主题"""
+        cls._is_dark = dark
+        cls._apply_theme()
+
+    @classmethod
+    def toggle(cls) -> None:
+        """切换主题"""
+        cls.set_dark(not cls._is_dark)
+
+    @classmethod
+    def _apply_theme(cls) -> None:
+        """应用主题到 DT.C"""
+        if cls._is_dark:
+            for attr in dir(DarkColors):
+                if attr.isupper() and not attr.startswith("_"):
+                    setattr(Colors, attr, getattr(DarkColors, attr))
+        else:
+            # 恢复默认亮色（重新导入模块级常量）
+            _restore_light_colors()
+
+    @classmethod
+    def get_colors(cls):
+        """获取当前主题色板"""
+        return DarkColors if cls._is_dark else Colors
+
+
+# 保存亮色默认值，用于主题切换恢复
+_LIGHT_DEFAULTS = {}
+for _attr in dir(Colors):
+    if _attr.isupper() and not _attr.startswith("_"):
+        _LIGHT_DEFAULTS[_attr] = getattr(Colors, _attr)
+
+
+def _restore_light_colors() -> None:
+    """恢复亮色主题默认值"""
+    for attr, value in _LIGHT_DEFAULTS.items():
+        setattr(Colors, attr, value)
+
+
 class DT:
     """
     Design Tokens 便捷访问类
@@ -344,6 +499,7 @@ class DT:
     SH = Shadows
     TR = Transitions
     Z = ZIndex
+    Theme = ThemeManager
 
 
 # ═══════════════════════════════════════════════════════════
@@ -456,6 +612,90 @@ class Stylesheets:
             }}
         """
 
+    # ── 统一样式工厂方法 (页面复用) ──────────────────
+
+    @staticmethod
+    def sheet_card(object_name: str = "cardContainer") -> str:
+        """卡片容器样式 — 所有页面统一使用"""
+        return f"""
+            QFrame#{object_name} {{
+                background: {Colors.BG_PRIMARY};
+                border: 1px solid {Colors.BORDER_DEFAULT};
+                border-radius: {Radius.LG}px;
+            }}
+        """
+
+    @staticmethod
+    def sheet_table() -> str:
+        """表格样式 — 数据表格统一使用"""
+        return f"""
+            QTableWidget {{
+                background: {Colors.BG_PRIMARY};
+                alternate-background-color: {Colors.BG_SECONDARY};
+                border: 1px solid {Colors.BORDER_DEFAULT};
+                border-radius: {Radius.MD}px;
+                font-size: 11px; outline: none;
+            }}
+            QTableWidget::item {{ padding: 4px 6px; border-bottom: 1px solid {Colors.DIVIDER}; }}
+            QHeaderView::section {{
+                background: {Colors.BG_SECONDARY}; color: {Colors.TEXT_SECONDARY};
+                border: none; border-bottom: 2px solid {Colors.BORDER_DEFAULT};
+                padding: 4px; font-size: 10px; font-weight: 600;
+            }}
+        """
+
+    @staticmethod
+    def sheet_combo(min_width: int = 80) -> str:
+        """下拉框样式"""
+        return f"""
+            QComboBox {{
+                background: {Colors.BG_PRIMARY}; border: 1px solid {Colors.BORDER_DEFAULT};
+                border-radius: 4px; padding: 4px 8px; font-size: 12px;
+                color: {Colors.TEXT_PRIMARY}; min-width: {min_width}px;
+            }}
+            QComboBox:hover {{ border-color: {Colors.BORDER_HOVER}; }}
+            QComboBox QAbstractItemView {{
+                background: {Colors.BG_PRIMARY}; border: 1px solid {Colors.BORDER_DEFAULT};
+                selection-background-color: {Colors.ACCENT_SUBTLE};
+            }}
+        """
+
+    @staticmethod
+    def sheet_spin() -> str:
+        """数值输入框样式"""
+        return f"""
+            QSpinBox, QDoubleSpinBox {{
+                background: {Colors.BG_PRIMARY}; border: 1px solid {Colors.BORDER_DEFAULT};
+                border-radius: 4px; padding: 4px 8px; font-size: 12px;
+                color: {Colors.TEXT_PRIMARY};
+            }}
+            QSpinBox:focus, QDoubleSpinBox:focus {{ border-color: {Colors.BORDER_FOCUS}; }}
+            QSpinBox:hover, QDoubleSpinBox:hover {{ border-color: {Colors.BORDER_HOVER}; }}
+        """
+
+    @staticmethod
+    def sheet_input() -> str:
+        """文本输入框样式"""
+        return f"""
+            QLineEdit {{
+                background: {Colors.BG_PRIMARY}; border: 1px solid {Colors.BORDER_DEFAULT};
+                border-radius: 4px; padding: 4px 8px; font-size: 12px;
+                color: {Colors.TEXT_PRIMARY};
+            }}
+            QLineEdit:focus {{ border-color: {Colors.BORDER_FOCUS}; }}
+            QLineEdit:hover {{ border-color: {Colors.BORDER_HOVER}; }}
+        """
+
+    @staticmethod
+    def section_header(text_color: str = Colors.TEXT_PRIMARY) -> str:
+        """区域标题标签样式"""
+        return f"color: {text_color};"
+
+    @staticmethod
+    def sub_header(text_color: str = Colors.TEXT_TERTIARY) -> str:
+        """次级标签样式"""
+        return f"color: {text_color}; font-size: 13px;"
+
 
 @staticmethod
 def adjust_color(hex_color: str, amount: int) -> str:
@@ -480,6 +720,9 @@ def adjust_color(hex_color: str, amount: int) -> str:
 
 
 Colors.adjust_color = staticmethod(adjust_color)
+
+# 绑定到 DT 便捷别名（必须在 Stylesheets 类定义之后）
+DT.sheet = Stylesheets
 
 
 if __name__ == "__main__":

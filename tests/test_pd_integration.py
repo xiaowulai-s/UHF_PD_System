@@ -32,16 +32,8 @@ from core.processing import FFTProcessor, PeakDetector, PRPDProcessor, PRPSProce
 from core.services import PDAlarmService  # noqa: F401 (used by all alarm tests)
 
 # ═══════════════════════════════════════════════════════
-# Fixtures
+# Fixtures (db_manager 由 conftest.py 提供)
 # ═══════════════════════════════════════════════════════
-
-
-@pytest.fixture(scope="session")
-def db_manager():
-    """内存数据库管理器"""
-    db = DatabaseManager(":memory:")
-    yield db
-    db.close()
 
 
 @pytest.fixture
@@ -457,7 +449,8 @@ class TestFpgaProtocol:
 
         assert len(frames) == 0
         # CRC 错误被捕获
-        assert proto.stats.get("crc_errors", 0) > 0 or True  # 可能被识别为帧头问题
+        # CRC 错误可能被识别为帧头问题，不一定 > 0
+        assert isinstance(proto.stats.get("crc_errors", 0), int)
 
     def test_device_status_frame(self):
         import struct

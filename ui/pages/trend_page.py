@@ -2,6 +2,7 @@
 """趋势分析页面 - 集成 TrendChartWidget"""
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from ui.design_tokens import DT
@@ -9,7 +10,7 @@ from ui.widgets import TrendChartWidget
 
 
 class TrendPage(QWidget):
-    """趋势分析 - 趋势曲线"""
+    """趋势分析 - 趋势曲线 (UHF + AE)"""
 
     def __init__(self, parent: QWidget = None):
         super().__init__(parent)
@@ -25,35 +26,45 @@ class TrendPage(QWidget):
         title.setStyleSheet(f"color: {DT.C.TEXT_PRIMARY};")
         layout.addWidget(title)
 
-        subtitle = QLabel("局放次数 · 最大幅值 · 平均幅值 · 放电能量 · 噪声水平")
+        subtitle = QLabel("局放次数 · 最大幅值 · 平均幅值 · 放电能量 · 噪声水平 · AE 趋势")
         subtitle.setFont(DT.T.get_font(*DT.T.BODY[:2]))
         subtitle.setStyleSheet(f"color: {DT.C.TEXT_TERTIARY};")
         layout.addWidget(subtitle)
 
-        # 趋势图 (TrendChartWidget)
-        chart_frame = QFrame()
-        chart_frame.setObjectName("cardContainer")
-        chart_frame.setStyleSheet(
-            f"""
-            QFrame#cardContainer {{
-                background: {DT.C.BG_PRIMARY};
-                border: 1px solid {DT.C.BORDER_DEFAULT};
-                border-radius: {DT.R.LG}px;
-            }}
-        """
-        )
-        chart_layout = QVBoxLayout(chart_frame)
-        chart_layout.setContentsMargins(DT.S.MD, DT.S.SM, DT.S.MD, DT.S.SM)
+        # UHF 趋势图
+        uhf_frame = QFrame()
+        uhf_frame.setObjectName("cardContainer")
+        uhf_frame.setStyleSheet(DT.sheet.sheet_card())
+        uhf_layout = QVBoxLayout(uhf_frame)
+        uhf_layout.setContentsMargins(DT.S.MD, DT.S.SM, DT.S.MD, DT.S.SM)
 
-        self._trend_chart = TrendChartWidget(title="趋势曲线")
-        # 预制示例系列
+        self._trend_chart = TrendChartWidget(title="UHF 趋势曲线")
         self._trend_chart.add_series("局放次数")
         self._trend_chart.add_series("最大幅值")
         self._trend_chart.add_series("平均幅值")
-        chart_layout.addWidget(self._trend_chart)
+        uhf_layout.addWidget(self._trend_chart)
 
-        layout.addWidget(chart_frame, 1)
+        layout.addWidget(uhf_frame, 1)
+
+        # AE 趋势图
+        ae_frame = QFrame()
+        ae_frame.setObjectName("cardContainer")
+        ae_frame.setStyleSheet(DT.sheet.sheet_card())
+        ae_layout = QVBoxLayout(ae_frame)
+        ae_layout.setContentsMargins(DT.S.MD, DT.S.SM, DT.S.MD, DT.S.SM)
+
+        self._ae_trend = TrendChartWidget(title="AE 趋势曲线")
+        self._ae_trend.add_series("AE Hit 速率", QColor(DT.C.ACCENT_PRIMARY))
+        self._ae_trend.add_series("AE 幅值", QColor(DT.C.STATUS_WARNING))
+        self._ae_trend.add_series("AE 能量", QColor(DT.C.STATUS_SUCCESS))
+        ae_layout.addWidget(self._ae_trend)
+
+        layout.addWidget(ae_frame, 1)
 
     @property
     def trend_chart(self) -> TrendChartWidget:
         return self._trend_chart
+
+    @property
+    def ae_trend(self) -> TrendChartWidget:
+        return self._ae_trend

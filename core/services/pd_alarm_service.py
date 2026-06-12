@@ -94,6 +94,14 @@ class PDAlarmService:
 
     # ── 报警检测 ─────────────────────────────────────
 
+    def set_channel_max_amplitude(self, device_id: str, channel_id: int, max_amplitude: float) -> None:
+        """设置指定通道的最大幅值阈值（AE 通道幅值通常小于 UHF）"""
+        with self._lock:
+            key = f"{device_id}:{channel_id}"
+            if "channel_max" not in self._amplitude_thresholds:
+                self._amplitude_thresholds["channel_max"] = {}
+            self._amplitude_thresholds["channel_max"][key] = max_amplitude
+
     def check_amplitude(self, device_id: str, channel_id: int, amplitude: float) -> Optional[dict]:
         """
         检测幅值是否超标
@@ -106,7 +114,13 @@ class PDAlarmService:
         Returns:
             报警字典，无报警则返回 None
         """
-        max_amp = self._amplitude_thresholds.get(device_id, {}).get("max_amplitude", self._global_max_amplitude)
+        # 按通道阈值优先 (AE 通道独立配置), 再设备阈值, 最后全局默认
+        ch_key = f"{device_id}:{channel_id}"
+        ch_max = self._amplitude_thresholds.get("channel_max", {}).get(ch_key)
+        if ch_max is not None:
+            max_amp = ch_max
+        else:
+            max_amp = self._amplitude_thresholds.get(device_id, {}).get("max_amplitude", self._global_max_amplitude)
         pct = (amplitude / max_amp) * 100 if max_amp > 0 else 0
 
         # 自定义阈值优先，否则使用模块级百分比阈值

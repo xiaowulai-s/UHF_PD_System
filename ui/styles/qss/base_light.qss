@@ -153,5 +153,5 @@ QTabBar::tab:!selected:hover {
 }
 QTabBar::tab:selected {
     color: #1F2937;
-    border-bottom-color: #2196F3;
+    border-bottom-color: #0969DA;
 }

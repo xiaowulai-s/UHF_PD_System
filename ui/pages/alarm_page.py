@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QMessageBox,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -27,9 +28,9 @@ class AlarmPage(QWidget):
     """报警管理 - 报警事件列表与规则配置"""
 
     LEVEL_COLORS = {
-        "critical": "#CF222E",
-        "warning": "#D29922",
-        "info": "#1A7F37",
+        "critical": DT.C.STATUS_ERROR,
+        "warning": DT.C.STATUS_WARNING,
+        "info": DT.C.STATUS_SUCCESS,
     }
 
     LEVEL_NAMES = {
@@ -73,21 +74,13 @@ class AlarmPage(QWidget):
     def _build_stats_bar(self, layout: QVBoxLayout) -> None:
         stats_frame = QFrame()
         stats_frame.setObjectName("cardContainer")
-        stats_frame.setStyleSheet(
-            f"""
-            QFrame#cardContainer {{
-                background: {DT.C.BG_PRIMARY};
-                border: 1px solid {DT.C.BORDER_DEFAULT};
-                border-radius: {DT.R.LG}px;
-            }}
-        """
-        )
+        stats_frame.setStyleSheet(DT.sheet.sheet_card())
         stats_frame.setFixedHeight(80)
         s_layout = QHBoxLayout(stats_frame)
         s_layout.setContentsMargins(DT.S.LG, DT.S.MD, DT.S.LG, DT.S.MD)
 
         self._stat_labels = {}
-        for key, color in [("critical", "#CF222E"), ("warning", "#D29922"), ("info", "#1A7F37")]:
+        for key, color in [("critical", DT.C.STATUS_ERROR), ("warning", DT.C.STATUS_WARNING), ("info", DT.C.STATUS_SUCCESS)]:
             card = QFrame()
             card.setStyleSheet(
                 f"""
@@ -137,15 +130,7 @@ class AlarmPage(QWidget):
         # 左: 报警列表
         list_frame = QFrame()
         list_frame.setObjectName("cardContainer")
-        list_frame.setStyleSheet(
-            f"""
-            QFrame#cardContainer {{
-                background: {DT.C.BG_PRIMARY};
-                border: 1px solid {DT.C.BORDER_DEFAULT};
-                border-radius: {DT.R.LG}px;
-            }}
-        """
-        )
+        list_frame.setStyleSheet(DT.sheet.sheet_card())
         list_layout = QVBoxLayout(list_frame)
         list_layout.setContentsMargins(DT.S.MD, DT.S.SM, DT.S.MD, DT.S.SM)
 
@@ -158,7 +143,7 @@ class AlarmPage(QWidget):
         self._filter_combo = QComboBox()
         self._filter_combo.addItems(["全部级别", "严重报警", "一般报警", "提示报警"])
         self._filter_combo.setFixedHeight(28)
-        self._filter_combo.setStyleSheet(self._combo_style())
+        self._filter_combo.setStyleSheet(DT.sheet.sheet_combo(100))
         self._filter_combo.currentIndexChanged.connect(self._on_filter_changed)
         l_title_row.addWidget(self._filter_combo)
         list_layout.addLayout(l_title_row)
@@ -170,7 +155,7 @@ class AlarmPage(QWidget):
         self._alarm_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._alarm_table.verticalHeader().setVisible(False)
         self._alarm_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self._alarm_table.setStyleSheet(self._table_style())
+        self._alarm_table.setStyleSheet(DT.sheet.sheet_table())
         self._alarm_table.horizontalHeader().setStretchLastSection(True)
         self._alarm_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self._alarm_table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)
@@ -199,15 +184,7 @@ class AlarmPage(QWidget):
         # 右: 规则配置
         rule_frame = QFrame()
         rule_frame.setObjectName("cardContainer")
-        rule_frame.setStyleSheet(
-            f"""
-            QFrame#cardContainer {{
-                background: {DT.C.BG_PRIMARY};
-                border: 1px solid {DT.C.BORDER_DEFAULT};
-                border-radius: {DT.R.LG}px;
-            }}
-        """
-        )
+        rule_frame.setStyleSheet(DT.sheet.sheet_card())
         rule_layout = QVBoxLayout(rule_frame)
         rule_layout.setContentsMargins(DT.S.MD, DT.S.SM, DT.S.MD, DT.S.SM)
 
@@ -229,7 +206,7 @@ class AlarmPage(QWidget):
         self._sp_critical.setRange(10, 1000)
         self._sp_critical.setValue(80)
         self._sp_critical.setFixedHeight(28)
-        self._sp_critical.setStyleSheet(self._spin_style())
+        self._sp_critical.setStyleSheet(DT.sheet.sheet_spin())
         row1.addWidget(self._sp_critical)
         form.addLayout(row1)
 
@@ -240,7 +217,7 @@ class AlarmPage(QWidget):
         self._sp_warning.setRange(10, 1000)
         self._sp_warning.setValue(50)
         self._sp_warning.setFixedHeight(28)
-        self._sp_warning.setStyleSheet(self._spin_style())
+        self._sp_warning.setStyleSheet(DT.sheet.sheet_spin())
         row2.addWidget(self._sp_warning)
         form.addLayout(row2)
 
@@ -251,7 +228,7 @@ class AlarmPage(QWidget):
         self._sp_info.setRange(10, 1000)
         self._sp_info.setValue(30)
         self._sp_info.setFixedHeight(28)
-        self._sp_info.setStyleSheet(self._spin_style())
+        self._sp_info.setStyleSheet(DT.sheet.sheet_spin())
         row3.addWidget(self._sp_info)
         form.addLayout(row3)
 
@@ -262,7 +239,7 @@ class AlarmPage(QWidget):
         self._sp_hysteresis.setRange(1, 20)
         self._sp_hysteresis.setValue(3)
         self._sp_hysteresis.setFixedHeight(28)
-        self._sp_hysteresis.setStyleSheet(self._spin_style())
+        self._sp_hysteresis.setStyleSheet(DT.sheet.sheet_spin())
         row4.addWidget(self._sp_hysteresis)
         form.addLayout(row4)
 
@@ -294,7 +271,7 @@ class AlarmPage(QWidget):
         self._alarm_service = service
 
     def add_alarm(self, alarm: dict) -> None:
-        """添加报警到表格"""
+        """添加报警到表格（批量调用时延迟刷新统计）"""
         row = self._alarm_table.rowCount()
         self._alarm_table.insertRow(0)
 
@@ -307,7 +284,7 @@ class AlarmPage(QWidget):
         # 级别
         level = alarm.get("level", "info")
         level_item = QTableWidgetItem(self.LEVEL_NAMES.get(level, level))
-        color = self.LEVEL_COLORS.get(level, "#666")
+        color = self.LEVEL_COLORS.get(level, DT.C.TEXT_TERTIARY)
         level_item.setForeground(QColor(color))
         level_item.setFont(DT.T.get_font("Segoe UI Variable", 12, "Bold"))
         self._alarm_table.setItem(0, 1, level_item)
@@ -342,6 +319,17 @@ class AlarmPage(QWidget):
         status_item.setForeground(QColor(DT.C.STATUS_WARNING))
         self._alarm_table.setItem(0, 6, status_item)
 
+        # 批量模式下延迟刷新；定时器也会周期性刷新
+        if not getattr(self, '_batch_mode', False):
+            self._refresh_stats()
+
+    def begin_batch(self) -> None:
+        """开始批量插入模式"""
+        self._batch_mode = True
+
+    def end_batch(self) -> None:
+        """结束批量插入并刷新统计"""
+        self._batch_mode = False
         self._refresh_stats()
 
     def _on_acknowledge(self) -> None:
@@ -371,6 +359,13 @@ class AlarmPage(QWidget):
             self._alarm_table.removeRow(row)
 
     def _on_clear_all(self) -> None:
+        reply = QMessageBox.question(
+            self, "确认清除", "确定要清除全部报警记录吗？此操作不可撤销。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
         self._alarm_table.setRowCount(0)
         if self._alarm_service:
             self._alarm_service.clear_all_alarms()
@@ -425,49 +420,3 @@ class AlarmPage(QWidget):
         self._stat_labels["warning"].setText(str(warning))
         self._stat_labels["info"].setText(str(info))
         self._total_label.setText(str(critical + warning + info))
-
-    # ── 样式 ─────────────────────────────────────────
-
-    @staticmethod
-    def _table_style() -> str:
-        return f"""
-            QTableWidget {{
-                background: {DT.C.BG_PRIMARY};
-                alternate-background-color: {DT.C.BG_SECONDARY};
-                border: 1px solid {DT.C.BORDER_DEFAULT};
-                border-radius: {DT.R.MD}px;
-                font-size: 12px;
-                outline: none;
-            }}
-            QTableWidget::item {{ padding: 6px 8px; border-bottom: 1px solid {DT.C.DIVIDER}; }}
-            QTableWidget::item:selected {{ background: {DT.C.ACCENT_SUBTLE}; color: {DT.C.ACCENT_PRIMARY}; }}
-            QHeaderView::section {{
-                background: {DT.C.BG_SECONDARY}; color: {DT.C.TEXT_SECONDARY};
-                border: none; border-bottom: 2px solid {DT.C.BORDER_DEFAULT};
-                padding: 6px; font-size: 11px; font-weight: 600;
-            }}
-        """
-
-    @staticmethod
-    def _combo_style() -> str:
-        return f"""
-            QComboBox {{
-                background: {DT.C.BG_PRIMARY}; border: 1px solid {DT.C.BORDER_DEFAULT};
-                border-radius: 4px; padding: 2px 8px; font-size: 12px; color: {DT.C.TEXT_PRIMARY};
-            }}
-            QComboBox::drop-down {{ border: none; width: 18px; }}
-            QComboBox QAbstractItemView {{
-                background: {DT.C.BG_PRIMARY}; border: 1px solid {DT.C.BORDER_DEFAULT};
-                selection-background-color: {DT.C.ACCENT_SUBTLE};
-            }}
-        """
-
-    @staticmethod
-    def _spin_style() -> str:
-        return f"""
-            QSpinBox {{
-                background: {DT.C.BG_PRIMARY}; border: 1px solid {DT.C.BORDER_DEFAULT};
-                border-radius: 4px; padding: 2px 6px; font-size: 12px; color: {DT.C.TEXT_PRIMARY};
-            }}
-            QSpinBox:focus {{ border-color: {DT.C.BORDER_FOCUS}; }}
-        """

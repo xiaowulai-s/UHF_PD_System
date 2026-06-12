@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""UHF PD Monitor 数据库模型
+"""UHF-AE PD Detector 数据库模型
 
 局放监测专用数据模型，复用现有 Base 和 DatabaseManager。
 所有模型自动被 DatabaseManager 的 create_all() 识别。
@@ -72,12 +72,15 @@ class PDChannelModel(Base):
     name = Column(String(64), default="")
     enabled = Column(Boolean, default=True)
     status = Column(Integer, default=0)  # 0=正常, 1=异常
-    coupling_type = Column(String(32), default="uhf")  # uhf, hfct, tev
+    coupling_type = Column(String(32), default="uhf")  # uhf, hfct, tev, ae
     sensor_type = Column(String(64), nullable=True)
     gain = Column(Float, default=1.0)
     attenuation_db = Column(Float, default=0)
     frequency_min_mhz = Column(Float, default=300)
     frequency_max_mhz = Column(Float, default=3000)
+    frequency_min_hz = Column(Float, nullable=True)  # AE: 最低频率 Hz (如 20000)
+    frequency_max_hz = Column(Float, nullable=True)  # AE: 最高频率 Hz (如 200000)
+    ae_sample_rate_hz = Column(Integer, nullable=True)  # AE: 采样率 Hz (如 2000000)
 
     device = relationship("PDDeviceModel", back_populates="channels")
 
@@ -100,6 +103,9 @@ class PDChannelModel(Base):
             "attenuation_db": self.attenuation_db,
             "frequency_min_mhz": self.frequency_min_mhz,
             "frequency_max_mhz": self.frequency_max_mhz,
+            "frequency_min_hz": self.frequency_min_hz,
+            "frequency_max_hz": self.frequency_max_hz,
+            "ae_sample_rate_hz": self.ae_sample_rate_hz,
         }
 
 
@@ -111,6 +117,7 @@ class PDEventModel(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     device_id = Column(String(64), nullable=False, index=True)
     channel_id = Column(Integer, nullable=True)  # 逻辑通道号，非 FK（避免与 pd_channels 耦合）
+    sensor_type = Column(String(16), default="uhf")  # uhf / ae / hfct / tev
     timestamp = Column(DateTime, default=utc_now, index=True)
     phase = Column(Float, nullable=True)  # 相位 0~360°
     amplitude = Column(Float, nullable=False)  # 幅值 mV
@@ -119,6 +126,11 @@ class PDEventModel(Base):
     frequency_mhz = Column(Float, nullable=True)  # 主频 MHz
     bandwidth_mhz = Column(Float, nullable=True)
     signal_quality = Column(Integer, default=0)  # 0-100
+    # AE 特有参数 (仅 AE 事件填充, UHF 事件为 null)
+    rise_time_us = Column(Float, nullable=True)  # AE: 上升时间 us
+    duration_us = Column(Float, nullable=True)  # AE: 持续时间 us
+    counts = Column(Integer, nullable=True)  # AE: 振铃计数
+    marse_energy = Column(Float, nullable=True)  # AE: MARSE 能量
     temperature = Column(Float, nullable=True)
     humidity = Column(Float, nullable=True)
     raw_data = Column(Text, nullable=True)  # JSON 原始数据
@@ -128,6 +140,7 @@ class PDEventModel(Base):
         Index("idx_pd_event_amp", "amplitude"),
         Index("idx_pd_event_time", "timestamp"),
         Index("idx_pd_event_device_channel", "device_id", "channel_id"),
+        Index("idx_pd_event_sensor_type", "sensor_type"),
     )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -135,6 +148,7 @@ class PDEventModel(Base):
             "id": self.id,
             "device_id": self.device_id,
             "channel_id": self.channel_id,
+            "sensor_type": self.sensor_type,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
             "phase": self.phase,
             "amplitude": self.amplitude,
@@ -143,6 +157,10 @@ class PDEventModel(Base):
             "frequency_mhz": self.frequency_mhz,
             "bandwidth_mhz": self.bandwidth_mhz,
             "signal_quality": self.signal_quality,
+            "rise_time_us": self.rise_time_us,
+            "duration_us": self.duration_us,
+            "counts": self.counts,
+            "marse_energy": self.marse_energy,
         }
 
 
@@ -164,6 +182,7 @@ class PDTrendDataModel(Base):
     noise_level = Column(Float, default=0)  # 噪声水平
     pulse_count = Column(Integer, default=0)  # 脉冲计数
     positive_ratio = Column(Float, default=0)  # 正极性比例
+    ae_hit_count = Column(Integer, default=0)  # AE hit 计数
 
     __table_args__ = (
         Index("idx_pd_trend_device_time", "device_id", "timestamp"),
@@ -185,6 +204,7 @@ class PDTrendDataModel(Base):
             "noise_level": self.noise_level,
             "pulse_count": self.pulse_count,
             "positive_ratio": self.positive_ratio,
+            "ae_hit_count": self.ae_hit_count,
         }
 
 
@@ -234,6 +254,8 @@ class PDAlarmModel(Base):
         "adc_abnormal": "ADC异常",
         "sync_abnormal": "同步异常",
         "storage_low": "存储空间不足",
+        "ae_signal_loss": "AE信号丢失",
+        "ae_noise_floor": "AE噪声超限",
     }
 
     def to_dict(self) -> Dict[str, Any]:

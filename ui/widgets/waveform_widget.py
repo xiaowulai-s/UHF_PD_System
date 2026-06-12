@@ -25,7 +25,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVB
 
 from ui.design_tokens import DT
 
-pg.setConfigOptions(antialias=True, foreground="#333333", background="#FAFAFA")
+pg.setConfigOptions(antialias=True, foreground=DT.C.CHART_FOREGROUND, background=DT.C.CHART_BACKGROUND)
 
 
 class WaveformWidget(QWidget):
@@ -37,10 +37,10 @@ class WaveformWidget(QWidget):
     trigger_changed = Signal(int)  # 触发位置
 
     # 波形颜色
-    WAVEFORM_COLOR = QColor(0, 180, 100)  # 绿色波形
-    TRIGGER_COLOR = QColor(255, 80, 80)  # 红色触发标记
-    CURSOR_COLOR = QColor(60, 120, 220)  # 蓝色游标
-    GRID_COLOR = QColor(220, 220, 220)  # 浅灰网格
+    WAVEFORM_COLOR = QColor(DT.C.CHART_WAVEFORM)  # 波形颜色
+    TRIGGER_COLOR = QColor(DT.C.STATUS_ERROR)  # 红色触发标记
+    CURSOR_COLOR = QColor(DT.C.ACCENT_PRIMARY)  # 蓝色游标
+    GRID_COLOR = QColor(DT.C.CHART_GRID)  # 网格
 
     def __init__(
         self,
@@ -124,9 +124,11 @@ class WaveformWidget(QWidget):
         self._plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._plot_widget.setMinimumHeight(150)
 
-        # 坐标轴标签
-        self._plot_widget.setLabel("left", "幅值", units="mV")
-        self._plot_widget.setLabel("bottom", "时间", units="μs")
+        # 坐标轴标签（默认 UHF: mV）
+        self._y_unit = "mV"
+        self._x_unit = "μs"
+        self._plot_widget.setLabel("left", "幅值", units=self._y_unit)
+        self._plot_widget.setLabel("bottom", "时间", units=self._x_unit)
 
         # 网格
         self._plot_widget.showGrid(x=True, y=True, alpha=0.3)
@@ -210,7 +212,14 @@ class WaveformWidget(QWidget):
         if self._update_counter % 10 == 0:
             v_max = float(np.max(np.abs(waveform)))
             time_range_us = n * dt_us
-            self._info_label.setText(f"{v_max:.1f} mVpk | {time_range_us:.1f} μs | {n} pts")
+            self._info_label.setText(f"{v_max:.1f} {self._y_unit}pk | {time_range_us:.1f} μs | {n} pts")
+
+    # ── 单位切换 ─────────────────────────────────────
+
+    def set_y_unit(self, unit: str) -> None:
+        """切换 Y 轴单位 (UHF: mV, AE: μV)"""
+        self._y_unit = unit
+        self._plot_widget.setLabel("left", "幅值", units=unit)
 
     # ── 控件切换 ─────────────────────────────────────
 

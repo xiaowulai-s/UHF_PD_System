@@ -29,6 +29,7 @@ DEFAULT_MENU_ITEMS: List[MenuItem] = [
     ("trend", "趋势分析", "↗"),  # ↗
     ("alarm", "报警管理", "⚠"),  # ⚠
     ("device", "设备管理", "⊞"),  # ⊞
+    ("ae", "AE 分析", "◎"),  # ◎
     ("settings", "系统设置", "⚙"),  # ⚙
 ]
 
@@ -64,7 +65,7 @@ class NavItem(QWidget):
 
         # 背景
         if self._selected:
-            painter.fillRect(3, 0, w - 3, h, QColor("#E3F2FD"))
+            painter.fillRect(3, 0, w - 3, h, QColor(DT.C.ACCENT_SUBTLE))
         elif self._hovered:
             painter.fillRect(3, 0, w - 3, h, QColor(DT.C.BG_HOVER))
 

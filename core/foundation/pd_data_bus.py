@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PD DataBus - 局放监测专用事件总线
+PD DataBus - 局放检测专用事件总线
 
 扩展自 DataBus 的核心模式，增加 PD 专用信号类型。
 采用组合方式包装 DataBus 单例，不修改原 DataBus 代码。
@@ -28,16 +28,20 @@ logger = logging.getLogger(__name__)
 
 
 class PDDataBusSignals(QObject):
-    """PD 专用信号定义"""
+    """PD 专用信号定义
 
-    # 波形数据
-    waveform_received = Signal(str, int, object)  # device_id, channel_id, waveform_data
+    信号签名: (device_id, channel_id, data) 或 (device_id, channel_id, sensor_type, data)
+    sensor_type 为 "uhf"/"ae"/"hfct"/"tev"，用于路由数据到对应 UI 面板。
+    """
+
+    # 波形数据 (增加 sensor_type 参数)
+    waveform_received = Signal(str, int, str, object)  # device_id, channel_id, sensor_type, waveform_data
 
     # 局放事件
     pd_event_detected = Signal(str, int, dict)  # device_id, channel_id, event_dict
 
-    # FFT 结果
-    fft_result_ready = Signal(str, int, object)  # device_id, channel_id, fft_result
+    # FFT 结果 (增加 sensor_type 参数)
+    fft_result_ready = Signal(str, int, str, object)  # device_id, channel_id, sensor_type, fft_result
 
     # PRPD 结果
     prpd_result_ready = Signal(str, int, object)  # device_id, channel_id, prpd_result
@@ -56,6 +60,10 @@ class PDDataBusSignals(QObject):
     acquisition_started = Signal(str)  # device_id
     acquisition_stopped = Signal(str)  # device_id
     acquisition_error = Signal(str, str)  # device_id, error_msg
+
+    # AE 信号
+    ae_hit_detected = Signal(str, int, object)  # device_id, channel_id, ae_hit_dict
+    ae_envelope_ready = Signal(str, int, object)  # device_id, channel_id, envelope_array
 
 
 class PDDataBus:
@@ -130,6 +138,14 @@ class PDDataBus:
     def acquisition_error(self) -> Signal:
         return self._signals.acquisition_error
 
+    @property
+    def ae_hit_detected(self) -> Signal:
+        return self._signals.ae_hit_detected
+
+    @property
+    def ae_envelope_ready(self) -> Signal:
+        return self._signals.ae_envelope_ready
+
     # ── 原始 DataBus 代理 ────────────────────────────
 
     @property
@@ -138,17 +154,17 @@ class PDDataBus:
 
     # ── 发布方法 ─────────────────────────────────────
 
-    def publish_waveform(self, device_id: str, channel_id: int, waveform_data: Any) -> None:
+    def publish_waveform(self, device_id: str, channel_id: int, waveform_data: Any, sensor_type: str = "uhf") -> None:
         """发布波形数据"""
-        self._signals.waveform_received.emit(device_id, channel_id, waveform_data)
+        self._signals.waveform_received.emit(device_id, channel_id, sensor_type, waveform_data)
 
     def publish_pd_event(self, device_id: str, channel_id: int, event_dict: dict) -> None:
         """发布局放事件"""
         self._signals.pd_event_detected.emit(device_id, channel_id, event_dict)
 
-    def publish_fft_result(self, device_id: str, channel_id: int, fft_result: Any) -> None:
+    def publish_fft_result(self, device_id: str, channel_id: int, fft_result: Any, sensor_type: str = "uhf") -> None:
         """发布 FFT 结果"""
-        self._signals.fft_result_ready.emit(device_id, channel_id, fft_result)
+        self._signals.fft_result_ready.emit(device_id, channel_id, sensor_type, fft_result)
 
     def publish_prpd_result(self, device_id: str, channel_id: int, prpd_result: Any) -> None:
         """发布 PRPD 结果"""
@@ -186,6 +202,14 @@ class PDDataBus:
         """发布采集停止"""
         self._signals.acquisition_stopped.emit(device_id)
         self._data_bus.publish_device_disconnected(device_id)
+
+    def publish_ae_hit(self, device_id: str, channel_id: int, ae_hit_dict: dict) -> None:
+        """发布 AE hit 事件"""
+        self._signals.ae_hit_detected.emit(device_id, channel_id, ae_hit_dict)
+
+    def publish_ae_envelope(self, device_id: str, channel_id: int, envelope: Any) -> None:
+        """发布 AE 包络波形"""
+        self._signals.ae_envelope_ready.emit(device_id, channel_id, envelope)
 
     def publish_acquisition_error(self, device_id: str, error_msg: str) -> None:
         """发布采集错误"""

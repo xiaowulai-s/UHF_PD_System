@@ -27,11 +27,7 @@ def db_manager():
 
     db = DatabaseManager(":memory:")
 
-    # 初始化表结构
-    from core.data.models import Base
-
-    engine = db.get_engine()
-    Base.metadata.create_all(engine)
+    # DatabaseManager.__init__ 已自动创建所有表，无需手动 create_all
 
     yield db
 

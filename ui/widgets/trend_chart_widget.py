@@ -25,16 +25,24 @@ from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QSize
 
 from ui.design_tokens import DT
 
-pg.setConfigOptions(antialias=True, foreground="#333333")
+pg.setConfigOptions(antialias=True, foreground=DT.C.CHART_FOREGROUND, background=DT.C.CHART_BACKGROUND)
 
-# 曲线颜色序列
+
+class TimeAxisItem(pg.AxisItem):
+    """时间轴项 - 将 Unix 时间戳格式化为 HH:MM:SS"""
+
+    def tickStrings(self, values, scale, spacing):
+        return [datetime.fromtimestamp(v).strftime("%H:%M:%S") for v in values]
+
+
+# 曲线颜色序列（使用 DT 令牌）
 SERIES_COLORS = [
-    QColor(50, 130, 220),  # 蓝色
-    QColor(220, 100, 60),  # 红色
-    QColor(60, 180, 100),  # 绿色
-    QColor(220, 180, 50),  # 黄色
-    QColor(160, 80, 200),  # 紫色
-    QColor(50, 180, 180),  # 青色
+    QColor(DT.C.ACCENT_PRIMARY),     # 蓝色
+    QColor(DT.C.STATUS_ERROR),       # 红色
+    QColor(DT.C.STATUS_SUCCESS),     # 绿色
+    QColor(DT.C.STATUS_WARNING),     # 黄色
+    QColor(DT.C.ACCENT_SECONDARY),   # 紫色
+    QColor(DT.C.CHART_WAVEFORM),     # 青色
 ]
 
 TIME_RANGES = {
@@ -87,8 +95,8 @@ class TrendChartWidget(QWidget):
 
         layout.addLayout(header)
 
-        # PyQtGraph 绘图控件
-        self._plot_widget = pg.PlotWidget()
+        # PyQtGraph 绘图控件（使用 TimeAxisItem 格式化 X 轴时间戳）
+        self._plot_widget = pg.PlotWidget(axisItems={'bottom': TimeAxisItem(orientation='bottom')})
         self._plot_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._plot_widget.setMinimumHeight(150)
 

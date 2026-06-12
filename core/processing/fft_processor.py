@@ -25,7 +25,7 @@ class FFTResult:
     frequencies: np.ndarray  # 频率数组 (Hz)
     magnitudes: np.ndarray  # 幅值数组
     phases: np.ndarray  # 相位数组
-    peaks: List[PeakInfo] = field(default_factory=list)  # 检测到的峰值
+    peaks: List[FFTPeakInfo] = field(default_factory=list)  # 检测到的峰值
     band_stats: Dict[str, BandStats] = field(default_factory=dict)  # 频段统计
     noise_floor: float = 0.0  # 噪声底噪
     snr_db: float = 0.0  # 信噪比 (dB)
@@ -33,8 +33,8 @@ class FFTResult:
 
 
 @dataclass
-class PeakInfo:
-    """峰值信息"""
+class FFTPeakInfo:
+    """FFT 峰值信息"""
 
     frequency: float  # 频率 (Hz)
     magnitude: float  # 幅值
@@ -66,25 +66,36 @@ class FFTProcessor:
         overlap: 窗口重叠率 0.0~1.0，默认 0.5
     """
 
-    # 常用频段划分 (MHz 范围)
-    DEFAULT_BANDS = {
-        "VLF": (0, 300),  # 甚低频
-        "UHF_low": (300, 1000),  # UHF 低频段
-        "UHF_mid": (1000, 2000),  # UHF 中频段
-        "UHF_high": (2000, 3000),  # UHF 高频段
+    # UHF 频段划分 (Hz 范围)
+    UHF_BANDS = {
+        "VLF": (0, 300e6),
+        "UHF_low": (300e6, 1000e6),
+        "UHF_mid": (1000e6, 2000e6),
+        "UHF_high": (2000e6, 3000e6),
     }
+
+    # AE 频段划分 (Hz 范围)
+    AE_BANDS = {
+        "AE_low": (20_000, 60_000),
+        "AE_mid": (60_000, 120_000),
+        "AE_high": (120_000, 200_000),
+    }
+
+    DEFAULT_BANDS = UHF_BANDS
 
     def __init__(
         self,
         sample_rate: int = 100_000_000,
         window_size: int = 4096,
         overlap: float = 0.5,
+        bands: Optional[Dict[str, Tuple[float, float]]] = None,
     ):
         self._sample_rate = sample_rate
         self._window_size = window_size
         self._overlap = np.clip(overlap, 0.0, 0.95)
         self._window = np.hanning(window_size)
         self._norm_factor = 2.0 / np.sum(self._window)
+        self._bands = bands
 
     @property
     def sample_rate(self) -> int:
@@ -213,7 +224,7 @@ class FFTProcessor:
         min_height: Optional[float] = None,
         min_distance: int = 5,
         prominence: float = 3.0,
-    ) -> List[PeakInfo]:
+    ) -> List[FFTPeakInfo]:
         """
         检测频谱峰值
 
@@ -265,7 +276,7 @@ class FFTProcessor:
                     harmonic_order = order
 
             result.append(
-                PeakInfo(
+                FFTPeakInfo(
                     frequency=freq,
                     magnitude=float(magnitudes[idx]),
                     bandwidth=float(bandwidth),
@@ -316,13 +327,11 @@ class FFTProcessor:
             频段统计字典
         """
         if bands is None:
-            bands = self.DEFAULT_BANDS
+            bands = self._bands if self._bands is not None else self.DEFAULT_BANDS
 
-        # 将 MHz 转换为 Hz
-        bands_hz = {name: (f_min * 1e6, f_max * 1e6) for name, (f_min, f_max) in bands.items()}
-
+        # bands 值统一为 Hz，无需额外转换
         stats = {}
-        for name, (f_min, f_max) in bands_hz.items():
+        for name, (f_min, f_max) in bands.items():
             mask = (frequencies >= f_min) & (frequencies <= f_max)
             band_mags = magnitudes[mask]
             band_freqs = frequencies[mask]

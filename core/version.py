@@ -1,7 +1,7 @@
-__version__ = "2.1.0"
+__version__ = "1.1.0"
 
 VERSION_INFO = {
-    "major": 2,
+    "major": 1,
     "minor": 1,
     "patch": 0,
     "releaselevel": "final",

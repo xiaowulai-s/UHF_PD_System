@@ -136,33 +136,33 @@ class SettingsPage(QWidget):
         form.setContentsMargins(DT.S.LG, DT.S.LG, DT.S.LG, DT.S.LG)
 
         self._net_host = QLineEdit(self._get("communication", "host", default="0.0.0.0"))
-        self._net_host.setStyleSheet(self._input_style())
+        self._net_host.setStyleSheet(DT.sheet.sheet_input())
         form.addRow("绑定地址:", self._net_host)
 
         self._net_tcp = QSpinBox()
         self._net_tcp.setRange(1, 65535)
         self._net_tcp.setValue(self._get("communication", "tcp_port", default=5000))
-        self._net_tcp.setStyleSheet(self._spin_style())
+        self._net_tcp.setStyleSheet(DT.sheet.sheet_spin())
         form.addRow("TCP 端口:", self._net_tcp)
 
         self._net_udp = QSpinBox()
         self._net_udp.setRange(1, 65535)
         self._net_udp.setValue(self._get("communication", "udp_port", default=6000))
-        self._net_udp.setStyleSheet(self._spin_style())
+        self._net_udp.setStyleSheet(DT.sheet.sheet_spin())
         form.addRow("UDP 端口:", self._net_udp)
 
         self._net_timeout = QSpinBox()
         self._net_timeout.setRange(1, 60)
         self._net_timeout.setValue(int(self._get("communication", "default_timeout", default=5)))
         self._net_timeout.setSuffix(" s")
-        self._net_timeout.setStyleSheet(self._spin_style())
+        self._net_timeout.setStyleSheet(DT.sheet.sheet_spin())
         form.addRow("超时时间:", self._net_timeout)
 
         self._net_buffer = QSpinBox()
         self._net_buffer.setRange(8, 256)
         self._net_buffer.setValue(self._get("communication", "buffer_size", default=64) // 1024)
         self._net_buffer.setSuffix(" KB")
-        self._net_buffer.setStyleSheet(self._spin_style())
+        self._net_buffer.setStyleSheet(DT.sheet.sheet_spin())
         form.addRow("缓冲区:", self._net_buffer)
 
         layout.addWidget(group)
@@ -179,7 +179,7 @@ class SettingsPage(QWidget):
         db_path = self._get("database", "path", default="data/pd_monitor.db")
         db_row = QHBoxLayout()
         self._db_path = QLineEdit(db_path)
-        self._db_path.setStyleSheet(self._input_style())
+        self._db_path.setStyleSheet(DT.sheet.sheet_input())
         db_row.addWidget(self._db_path)
         btn_browse = QPushButton("浏览...")
         btn_browse.setFixedHeight(28)
@@ -197,14 +197,14 @@ class SettingsPage(QWidget):
         self._db_retention.setRange(30, 730)
         self._db_retention.setValue(self._get("storage", "retention_days", default=365))
         self._db_retention.setSuffix(" 天")
-        self._db_retention.setStyleSheet(self._spin_style())
+        self._db_retention.setStyleSheet(DT.sheet.sheet_spin())
         form.addRow("数据保留:", self._db_retention)
 
         self._db_max_events = QSpinBox()
         self._db_max_events.setRange(1, 100)
         self._db_max_events.setValue(self._get("storage", "max_pd_events", default=10000000) // 1000000)
         self._db_max_events.setSuffix(" 百万条")
-        self._db_max_events.setStyleSheet(self._spin_style())
+        self._db_max_events.setStyleSheet(DT.sheet.sheet_spin())
         form.addRow("最大事件数:", self._db_max_events)
 
         layout.addWidget(group)
@@ -296,42 +296,6 @@ class SettingsPage(QWidget):
                 border: 1px solid {DT.C.BORDER_DEFAULT};
                 border-radius: {DT.R.SM}px;
                 left: 16px;
-            }}
-        """
-
-    @staticmethod
-    def _input_style() -> str:
-        return f"""
-            QLineEdit {{
-                background: {DT.C.BG_PRIMARY}; border: 1px solid {DT.C.BORDER_DEFAULT};
-                border-radius: 4px; padding: 4px 8px; font-size: 12px; color: {DT.C.TEXT_PRIMARY};
-            }}
-            QLineEdit:focus {{ border-color: {DT.C.BORDER_FOCUS}; border-width: 2px; }}
-        """
-
-    @staticmethod
-    def _spin_style() -> str:
-        return f"""
-            QSpinBox {{
-                background: {DT.C.BG_PRIMARY}; border: 1px solid {DT.C.BORDER_DEFAULT};
-                border-radius: 4px; padding: 2px 6px; font-size: 12px; color: {DT.C.TEXT_PRIMARY};
-                min-width: 100px;
-            }}
-            QSpinBox:focus {{ border-color: {DT.C.BORDER_FOCUS}; }}
-        """
-
-    @staticmethod
-    def _combo_style() -> str:
-        return f"""
-            QComboBox {{
-                background: {DT.C.BG_PRIMARY}; border: 1px solid {DT.C.BORDER_DEFAULT};
-                border-radius: 4px; padding: 2px 8px; font-size: 12px; color: {DT.C.TEXT_PRIMARY};
-                min-width: 120px;
-            }}
-            QComboBox::drop-down {{ border: none; width: 18px; }}
-            QComboBox QAbstractItemView {{
-                background: {DT.C.BG_PRIMARY}; border: 1px solid {DT.C.BORDER_DEFAULT};
-                selection-background-color: {DT.C.ACCENT_SUBTLE};
             }}
         """
 

@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
 
 from ui.design_tokens import DT
 
-pg.setConfigOptions(antialias=True, foreground="#333333")
+pg.setConfigOptions(antialias=True, foreground=DT.C.CHART_FOREGROUND, background=DT.C.CHART_BACKGROUND)
 
 # 频段颜色
 BAND_COLORS = {
@@ -113,14 +113,14 @@ class FFTWidget(QWidget):
         self._plot_widget.showGrid(x=True, y=True, alpha=0.2)
 
         # 频谱曲线
-        pen = pg.mkPen(QColor(50, 120, 220), width=1.5)
+        pen = pg.mkPen(QColor(DT.C.ACCENT_PRIMARY), width=1.5)
         self._curve = self._plot_widget.plot(pen=pen, clear=True)
 
         # 噪声底噪线
         self._noise_line = pg.InfiniteLine(
             angle=0,
             movable=False,
-            pen=pg.mkPen(QColor(200, 80, 80), width=1, style=Qt.PenStyle.DashLine),
+            pen=pg.mkPen(QColor(DT.C.STATUS_ERROR), width=1, style=Qt.PenStyle.DashLine),
         )
         self._noise_line.setVisible(False)
         self._plot_widget.addItem(self._noise_line)
@@ -217,7 +217,7 @@ class FFTWidget(QWidget):
             self._noise_text.setVisible(True)
             self._noise_text.setPos(freq_mhz[-1], noise_display)
             self._noise_text.setText(f" 噪声: {noise_floor:.1f}")
-            self._noise_text.setColor(QColor(200, 80, 80))
+            self._noise_text.setColor(QColor(DT.C.STATUS_ERROR))
         else:
             self._noise_line.setVisible(False)
             self._noise_text.setVisible(False)
@@ -261,15 +261,15 @@ class FFTWidget(QWidget):
 
             # 高亮前 3 个
             if row == 0:
-                color = QColor(220, 80, 60)
+                color = QColor(DT.C.STATUS_ERROR)
             elif row < 3:
-                color = QColor(200, 160, 50)
+                color = QColor(DT.C.STATUS_WARNING)
             else:
                 color = QColor(DT.C.TEXT_SECONDARY)
             freq_item.setForeground(color)
             mag_item.setForeground(color)
             if is_harmonic:
-                type_item.setForeground(QColor(100, 150, 200))
+                type_item.setForeground(QColor(DT.C.ACCENT_PRIMARY))
 
             self._peak_table.setItem(row, 0, freq_item)
             self._peak_table.setItem(row, 1, mag_item)

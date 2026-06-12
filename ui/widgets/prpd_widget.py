@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
 
 from ui.design_tokens import DT
 
-pg.setConfigOptions(antialias=True, foreground="#333333")
+pg.setConfigOptions(antialias=True, foreground=DT.C.CHART_FOREGROUND, background=DT.C.CHART_BACKGROUND)
 
 logger = logging.getLogger(__name__)
 
@@ -97,9 +97,9 @@ class PRPDWidget(QWidget):
 
     mode_changed = Signal(str)
 
-    # 统一颜色映射：2D/3D 均使用 jet，保持视觉一致性
-    COLORMAP_2D = "jet"
-    COLORMAP_3D = "jet"
+    # 统一颜色映射：2D/3D 均使用 DT 令牌，保持视觉一致性
+    COLORMAP_2D = DT.C.CHART_COLORMAP
+    COLORMAP_3D = DT.C.CHART_COLORMAP
 
     def __init__(self, title: str = "PRPD 图谱", parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -266,16 +266,13 @@ class PRPDWidget(QWidget):
         self._image_item.setVisible(self._display_mode != "scatter")
         self._scatter_plot.setVisible(self._display_mode == "scatter")
 
-        # 使用模块级 _JET_CMAP（从 Matplotlib jet 提取），fallback 到 turbo
-        if self.COLORMAP_2D == "jet" and _JET_CMAP is not None:
-            cmap = _JET_CMAP
-        else:
-            try:
-                cmap = pg.colormap.get(self.COLORMAP_2D)
-            except (FileNotFoundError, OSError):
-                cmap = None
-            if cmap is None:
-                cmap = pg.colormap.get("turbo")
+        # 使用 DT 令牌指定的颜色映射，fallback 到 turbo
+        try:
+            cmap = pg.colormap.get(self.COLORMAP_2D)
+        except (FileNotFoundError, OSError):
+            cmap = None
+        if cmap is None:
+            cmap = pg.colormap.get("turbo")
         if cmap is not None:
             self._image_item.setColorMap(cmap)
 
@@ -322,7 +319,7 @@ class PRPDWidget(QWidget):
         - box_aspect: (1.45, 1.15, 1.20)
         - 颜色映射: jet
         """
-        fig = Figure(figsize=(10, 8), facecolor="white", dpi=100)
+        fig = Figure(figsize=(10, 8), facecolor=DT.C.CHART_BACKGROUND, dpi=100)
         ax = fig.add_subplot(111, projection="3d")
 
         # 中文字体设置
@@ -445,7 +442,7 @@ class PRPDWidget(QWidget):
                 discharge,
                 s=18,  # 与 plot_PRPS.py 一致
                 c=discharge,
-                cmap="jet",
+                cmap=DT.C.CHART_COLORMAP,
                 marker="o",
                 edgecolors="none",
             )
@@ -473,7 +470,7 @@ class PRPDWidget(QWidget):
             discharge,
             s=18,  # 与 plot_PRPS.py 一致
             c=discharge,
-            cmap="jet",
+            cmap=DT.C.CHART_COLORMAP,
             marker="o",
             edgecolors="none",
         )

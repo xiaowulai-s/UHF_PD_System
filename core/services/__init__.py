@@ -1,43 +1,18 @@
 # -*- coding: utf-8 -*-
 """
 核心服务层
-Core Services
 
-业务逻辑层 — 纯Python，无Qt依赖（DataBus除外）
-- MCGSService: MCGS设备业务服务（读取+解析+报警+存储+发布）
-- HistoryService: 历史数据服务（存储+查询+统计+导出）
-- AnomalyService: 异常检测服务（统计+趋势+规则检测）
+PD 系统服务：
+- AcquisitionService: 数据采集与信号处理
+- PDAlarmService: 报警检测与管理
+- PDStorageService: 数据持久化
 """
 
-from .audit_log_service import AuditLogService
-from .data_quality_service import DataQualityService, QualityCode
-from .remote_api_service import RemoteAPIService
-from .report_service import ReportService
-from .mcgs_service import MCGSService, MCGSReadResult
-from .history_service import HistoryService
-from .anomaly_service import AnomalyService
-
-# PD 服务（可选，不影响 MCGS 系统）
-try:
-    from .pd_acquisition_service import AcquisitionResult, AcquisitionService
-    from .pd_alarm_service import ALARM_LEVELS, ALARM_TYPE_NAMES, PDAlarmService
-    from .pd_storage_service import PDStorageService
-except ImportError:
-    AcquisitionService = None  # type: ignore
-    PDAlarmService = None  # type: ignore
-    PDStorageService = None  # type: ignore
+from .pd_acquisition_service import AcquisitionResult, AcquisitionService
+from .pd_alarm_service import ALARM_LEVELS, ALARM_TYPE_NAMES, PDAlarmService
+from .pd_storage_service import PDStorageService
 
 __all__ = [
-    "AuditLogService",
-    "DataQualityService",
-    "QualityCode",
-    "RemoteAPIService",
-    "ReportService",
-    "MCGSService",
-    "MCGSReadResult",
-    "HistoryService",
-    "AnomalyService",
-    # PD 服务
     "AcquisitionService",
     "AcquisitionResult",
     "PDAlarmService",

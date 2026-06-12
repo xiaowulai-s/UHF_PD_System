@@ -45,7 +45,7 @@ from ui.design_tokens import DT
 try:
     import pyqtgraph as pg
 
-    pg.setConfigOptions(antialias=True, foreground="#333333")
+    pg.setConfigOptions(antialias=True, foreground=DT.C.CHART_FOREGROUND)
     HAS_PYQTGRAPH = True
 except ImportError:
     HAS_PYQTGRAPH = False
@@ -962,10 +962,10 @@ class ReportExporter:
 
 # 等级颜色
 LEVEL_COLORS = {
-    "critical": "#CF222E",
-    "warning": "#D29922",
-    "attention": "#0969DA",
-    "normal": "#1A7F37",
+    "critical": DT.C.STATUS_ERROR,
+    "warning": DT.C.STATUS_WARNING,
+    "attention": DT.C.ACCENT_PRIMARY,
+    "normal": DT.C.STATUS_SUCCESS,
 }
 LEVEL_NAMES = {
     "critical": "严重",
@@ -1115,15 +1115,7 @@ class AnalysisPage(QWidget):
     def _build_prpd_panel(self, parent: QLayout) -> None:
         frame = QFrame()
         frame.setObjectName("cardContainer")
-        frame.setStyleSheet(
-            f"""
-            QFrame#cardContainer {{
-                background: {DT.C.BG_PRIMARY};
-                border: 1px solid {DT.C.BORDER_DEFAULT};
-                border-radius: {DT.R.LG}px;
-            }}
-        """
-        )
+        frame.setStyleSheet(DT.sheet.sheet_card())
         fl = QVBoxLayout(frame)
         fl.setContentsMargins(DT.S.MD, DT.S.SM, DT.S.MD, DT.S.SM)
 
@@ -1142,15 +1134,7 @@ class AnalysisPage(QWidget):
     def _build_result_panel(self, parent: QHBoxLayout) -> None:
         frame = QFrame()
         frame.setObjectName("cardContainer")
-        frame.setStyleSheet(
-            f"""
-            QFrame#cardContainer {{
-                background: {DT.C.BG_PRIMARY};
-                border: 1px solid {DT.C.BORDER_DEFAULT};
-                border-radius: {DT.R.LG}px;
-            }}
-        """
-        )
+        frame.setStyleSheet(DT.sheet.sheet_card())
         fl = QVBoxLayout(frame)
         fl.setContentsMargins(DT.S.MD, DT.S.SM, DT.S.MD, DT.S.SM)
 
@@ -1269,15 +1253,7 @@ class AnalysisPage(QWidget):
     def _build_distribution_panel(self, layout: QVBoxLayout) -> None:
         frame = QFrame()
         frame.setObjectName("cardContainer")
-        frame.setStyleSheet(
-            f"""
-            QFrame#cardContainer {{
-                background: {DT.C.BG_PRIMARY};
-                border: 1px solid {DT.C.BORDER_DEFAULT};
-                border-radius: {DT.R.LG}px;
-            }}
-        """
-        )
+        frame.setStyleSheet(DT.sheet.sheet_card())
         fl = QVBoxLayout(frame)
         fl.setContentsMargins(DT.S.MD, DT.S.SM, DT.S.MD, DT.S.SM)
 

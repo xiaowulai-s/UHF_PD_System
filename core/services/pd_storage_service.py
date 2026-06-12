@@ -137,6 +137,11 @@ class PDStorageService:
                 "frequency_mhz": event.get("frequency_mhz"),
                 "bandwidth_mhz": event.get("bandwidth_mhz"),
                 "signal_quality": event.get("signal_quality", 0),
+                # AE 特有字段 (nullable, UHF 事件为 None)
+                "rise_time_us": event.get("rise_time_us"),
+                "duration_us": event.get("duration_us"),
+                "counts": event.get("counts"),
+                "marse_energy": event.get("marse_energy"),
             }
         )
 
@@ -174,6 +179,7 @@ class PDStorageService:
                 "noise_level": stats.get("noise_level", 0),
                 "pulse_count": stats.get("pulse_count", 0),
                 "positive_ratio": stats.get("positive_ratio", 0),
+                "ae_hit_count": stats.get("ae_hit_count", 0),
             }
         )
 

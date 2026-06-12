@@ -1,5 +1,5 @@
 """
-超高频局部放电在线监测系统 - 程序入口
+超高频超声波局部放电检测系统 - 程序入口
 
 启动流程:
     1. 初始化日志系统
@@ -9,14 +9,14 @@
     5. 启动 PD 主窗口
     6. 初始化系统控制器
     7. 可选启动模拟器（用于无硬件时的演示）
-
 用法:
     python pd_main.py                          # 正常模式
     python pd_main.py --simulator              # 模拟器模式（无需 FPGA）
+    python pd_main.py --simulator --sim-type ae  # AE 模拟器模式
     python pd_main.py --simulator --pd-type corona  # 指定局放类型
 """
 
-# ── 编码修复（必须在所有 import 之前）─────────────────
+# ── 编码修复（必须在所有 import 之前）──
 import os
 import sys
 
@@ -26,8 +26,6 @@ os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 if sys.platform == "win32":
     try:
         import ctypes
-
-        # CP65001 = UTF-8 代码页
         ctypes.windll.kernel32.SetConsoleOutputCP(65001)
         ctypes.windll.kernel32.SetConsoleCP(65001)
     except Exception:
@@ -44,7 +42,7 @@ from pathlib import Path
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="超高频局部放电在线监测系统 v1.0.6")
+    parser = argparse.ArgumentParser(description="超高频超声波局部放电检测系统 v1.0.7")
     parser.add_argument("--simulator", action="store_true", help="启动数据模拟器（无需 FPGA 硬件）")
     parser.add_argument(
         "--pd-type",
@@ -54,6 +52,13 @@ def parse_args() -> argparse.Namespace:
         help="局放类型 (默认: internal)",
     )
     parser.add_argument("--fps", type=int, default=20, help="模拟器帧率 (默认: 20)")
+    parser.add_argument(
+        "--sim-type",
+        type=str,
+        default="uhf",
+        choices=["uhf", "ae"],
+        help="模拟器类型: uhf=超高频, ae=超声波 (默认: uhf)",
+    )
     parser.add_argument(
         "--log-level",
         type=str,
@@ -65,7 +70,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    """PD 监测系统主入口"""
+    """PD 检测系统主入口"""
     args = parse_args()
 
     from core.utils.logger import get_logger, setup_logging
@@ -73,9 +78,10 @@ def main() -> int:
     setup_logging(log_level=args.log_level, log_file="logs/pd_system/pd_monitor.log")
     logger = get_logger("pd_system")
     logger.info("=" * 50)
-    logger.info("超高频局部放电在线监测系统 v1.0.6 启动中...")
+    logger.info("超高频超声波局部放电检测系统 v1.0.7 启动中..")
     logger.info("=" * 50)
-    logger.info("启动参数: simulator=%s, pd_type=%s, fps=%d", args.simulator, args.pd_type, args.fps)
+    logger.info("启动参数: simulator=%s, sim_type=%s, pd_type=%s, fps=%d",
+                args.simulator, args.sim_type, args.pd_type, args.fps)
 
     _PROJECT_ROOT = Path(__file__).resolve().parent
     config_path = _PROJECT_ROOT / "config" / "pd_default_config.json"
@@ -115,13 +121,14 @@ def main() -> int:
     from PySide6.QtWidgets import QApplication
 
     if hasattr(Qt, "AA_EnableHighDpiScaling"):
-        QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+        QApplication.setHighDpiScaleFactorRoundingPolicy(
+            Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
     app = QApplication(sys.argv)
-    PD_VERSION = "1.0.6"
-    app.setApplicationName("超高频局部放电在线监测系统")
+    PD_VERSION = "1.0.7"
+    app.setApplicationName("超高频超声波局部放电检测系统")
     app.setApplicationVersion(PD_VERSION)
-    app.setOrganizationName("UHF-PD-Monitor")
+    app.setOrganizationName("UHF-AE-PD-Detector")
     app.setWindowIcon(QIcon("assets/icons/ems.png"))
 
     # 应用主题
@@ -148,16 +155,18 @@ def main() -> int:
     # 初始化系统控制器
     from ui.pd_controller import PDSystemController
 
-    controller = PDSystemController(db_manager=db_manager)
+    controller = PDSystemController(db_manager=db_manager, parent=window)
     controller.initialize(pages=window.pages)
     window.set_controller(controller)
 
     # 可选启动模拟器
     if args.simulator:
-        controller.start_simulator(pd_type=args.pd_type, fps=args.fps)
-        logger.info("数据模拟器已启动: type=%s, %d FPS", args.pd_type, args.fps)
+        controller.start_simulator(
+            pd_type=args.pd_type, fps=args.fps, sim_type=args.sim_type)
+        logger.info("数据模拟器已启动: type=%s/%s, %d FPS",
+                    args.sim_type, args.pd_type, args.fps)
 
-    logger.info("PD 监测系统启动完成")
+    logger.info("PD 检测系统启动完成")
 
     try:
         exit_code = app.exec()
@@ -166,7 +175,7 @@ def main() -> int:
 
     # 清理
     controller.shutdown()
-    logger.info("PD 监测系统关闭 (exit_code=%d)", exit_code)
+    logger.info("PD 检测系统关闭 (exit_code=%d)", exit_code)
     return exit_code
 
 

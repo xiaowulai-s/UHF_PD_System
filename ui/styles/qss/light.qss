@@ -17,8 +17,8 @@ QPushButton:hover {
     border-color: #9CA3AF;
 }
 QPushButton:pressed {
-    background-color: #2196F3;
-    border-color: #2196F3;
+    background-color: #0969DA;
+    border-color: #0969DA;
     color: #FFFFFF;
 }
 QPushButton:disabled {
@@ -42,7 +42,7 @@ QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover, QComboBox:hover {
     border-color: #9CA3AF;
 }
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
-    border-color: #2196F3;
+    border-color: #0969DA;
 }
 QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QComboBox:disabled {
     background-color: #F3F4F6;
@@ -86,7 +86,7 @@ QTextEdit, QPlainTextEdit {
     selection-background-color: #BFDBFE;
 }
 QTextEdit:focus, QPlainTextEdit:focus {
-    border-color: #2196F3;
+    border-color: #0969DA;
 }
 
 /* ── 表格/树控件 ── */
@@ -126,8 +126,8 @@ QCheckBox::indicator:hover {
     border-color: #9CA3AF;
 }
 QCheckBox::indicator:checked {
-    background-color: #2196F3;
-    border-color: #2196F3;
+    background-color: #0969DA;
+    border-color: #0969DA;
 }
 
 /* ── 单选按钮 ── */
@@ -146,8 +146,8 @@ QRadioButton::indicator:hover {
     border-color: #9CA3AF;
 }
 QRadioButton::indicator:checked {
-    background-color: #2196F3;
-    border-color: #2196F3;
+    background-color: #0969DA;
+    border-color: #0969DA;
 }
 
 /* ── 滑块 ── */
@@ -161,7 +161,7 @@ QSlider::handle:horizontal {
     height: 16px;
     margin: -6px 0;
     background: #FFFFFF;
-    border: 2px solid #2196F3;
+    border: 2px solid #0969DA;
     border-radius: 8px;
 }
 QSlider::handle:horizontal:hover {
@@ -179,6 +179,6 @@ QProgressBar {
     font-size: 11px;
 }
 QProgressBar::chunk {
-    background-color: #2196F3;
+    background-color: #0969DA;
     border-radius: 4px;
 }

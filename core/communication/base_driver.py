@@ -1,93 +1,66 @@
 # -*- coding: utf-8 -*-
 """
 通信驱动基类
-Base Communication Driver
+
+所有通信驱动（UDP、TCP、Serial）的抽象基类，
+定义统一的连接管理、数据收发接口。
 """
 
-from typing import Callable, Optional
+from __future__ import annotations
 
-from PySide6.QtCore import QMutex, QMutexLocker, QObject, Signal
+import logging
+from typing import Optional
+
+from PySide6.QtCore import QObject, Signal
+
+logger = logging.getLogger(__name__)
 
 
 class BaseDriver(QObject):
     """
     通信驱动基类
-    Base class for communication drivers
+
+    提供统一的连接状态管理、信号定义和生命周期控制。
+    子类需实现 connect() / disconnect() / send() 方法。
     """
 
-    # 信号定义
-    data_received = Signal(bytes)
-    data_sent = Signal(bytes)
-    connected = Signal()
-    disconnected = Signal()
-    error_occurred = Signal(str)
+    # ── 通用信号 ─────────────────────────────────────
+    connected = Signal()           # 连接成功
+    disconnected = Signal()        # 连接断开
+    connection_error = Signal(str) # 连接错误
+    data_received = Signal(bytes)  # 数据接收
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)
         self._is_connected = False
-        self._buffer = bytearray()
-        self._buffer_mutex = QMutex()
+
+    # ── 连接管理（子类实现）─────────────────────────
 
     def connect(self) -> bool:
-        """
-        连接设备
-        Connect to device
-        """
-        raise NotImplementedError("子类必须实现connect方法")
+        """建立连接，子类必须实现"""
+        raise NotImplementedError
 
-    def disconnect(self):
-        """
-        断开连接
-        Disconnect from device
-        """
-        raise NotImplementedError("子类必须实现disconnect方法")
+    def disconnect(self) -> None:
+        """断开连接，子类必须实现"""
+        raise NotImplementedError
 
-    def send_data(self, data: bytes) -> bool:
-        """
-        发送数据
-        Send data to device
-        """
-        raise NotImplementedError("子类必须实现send_data方法")
+    def send(self, data: bytes) -> bool:
+        """发送数据，子类必须实现"""
+        raise NotImplementedError
 
+    # ── 通用属性 ─────────────────────────────────────
+
+    @property
     def is_connected(self) -> bool:
-        """
-        检查连接状态
-        Check connection status
-        """
+        """连接状态"""
         return self._is_connected
 
-    MAX_BUFFER_SIZE = 1024 * 1024  # 1MB
+    @property
+    def host(self) -> str:
+        """主机地址"""
+        return getattr(self, "_host", "")
 
-    def _append_to_buffer(self, data: bytes):
-        locker = QMutexLocker(self._buffer_mutex)
-        self._buffer.extend(data)
-        if len(self._buffer) > self.MAX_BUFFER_SIZE:
-            self._buffer = self._buffer[-self.MAX_BUFFER_SIZE :]
-
-    def _clear_buffer(self):
-        """
-        清空缓冲区
-        Clear buffer
-        """
-        locker = QMutexLocker(self._buffer_mutex)
-        self._buffer.clear()
-
-    def _get_buffer(self) -> bytes:
-        """
-        获取缓冲区数据
-        Get buffer data
-        """
-        locker = QMutexLocker(self._buffer_mutex)
-        return bytes(self._buffer)
-
-    def _extract_from_buffer(self, length: int) -> Optional[bytes]:
-        """
-        从缓冲区提取指定长度的数据
-        Extract data from buffer
-        """
-        locker = QMutexLocker(self._buffer_mutex)
-        if len(self._buffer) >= length:
-            data = bytes(self._buffer[:length])
-            del self._buffer[:length]
-            return data
-        return None
+    @property
+    def port(self) -> int:
+        """端口号"""
+        return getattr(self, "_port", 0)

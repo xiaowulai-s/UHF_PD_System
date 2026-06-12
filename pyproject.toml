@@ -1,12 +1,10 @@
-# ═══════════════════════════════════════════════════════════
-# 工业设备管理系统 - 项目工程配置
-# Python 3.10+ | PySide6 Widgets
-# ═══════════════════════════════════════════════════════════
+# UHF-AE PD Detection System
+# Python 3.10+ | PySide6
 
 [project]
-name = "equipment-management"
-version = "2.1.0"
-description = "工业设备管理系统 - Modbus设备监控与管理"
+name = "uhf-ae-pd-detector"
+version = "1.1.0"
+description = "超高频超声波局部放电检测系统 - UHF/AE dual-modality PD detection platform"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 
@@ -16,6 +14,10 @@ dependencies = [
     "pyqtgraph>=0.13.0",
     "openpyxl>=3.1.0",
     "pyserial>=3.5",
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "structlog>=23.0.0",
+    "sqlalchemy>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -29,9 +31,9 @@ dev = [
     "toml>=0.10.2",
 ]
 
-# ═══════════════════════════════════════════════════════════
-# Black 代码格式化
-# ═══════════════════════════════════════════════════════════
+# 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+# Black 浠ｇ爜鏍煎紡鍖?
+# 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
 
 [tool.black]
 line-length = 100
@@ -55,9 +57,9 @@ exclude = '''
     )/
 '''
 
-# ═══════════════════════════════════════════════════════════
-# pytest 测试框架
-# ═══════════════════════════════════════════════════════════
+# 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+# pytest 娴嬭瘯妗嗘灦
+# 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -70,18 +72,18 @@ addopts = [
     "--strict-markers",
 ]
 markers = [
-    "unit: 单元测试",
-    "integration: 集成测试",
-    "slow: 耗时测试",
-    "protocol: 协议层测试",
-    "driver: 驱动层测试",
-    "device: 设备层测试",
-    "alarm: 报警测试",
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "slow: Slow tests",
+    "protocol: Protocol layer tests",
+    "driver: Driver layer tests",
+    "device: Device layer tests",
+    "alarm: Alarm tests",
 ]
 qt_api = "pyside6"
 
 [tool.coverage.run]
-source = ["src"]
+source = ["core", "ui"]
 omit = [
     "tests/*",
     "**/__init__.py",
@@ -97,9 +99,9 @@ exclude_lines = [
     "raise NotImplementedError",
 ]
 
-# ═══════════════════════════════════════════════════════════
-# mypy 类型检查
-# ═══════════════════════════════════════════════════════════
+# 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+# mypy 绫诲瀷妫€鏌?
+# 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
 
 [tool.mypy]
 python_version = "3.10"
@@ -111,3 +113,4 @@ check_untyped_defs = true
 [[tool.mypy.overrides]]
 module = ["pyqtgraph.*", "serial.*"]
 ignore_missing_imports = true
+
